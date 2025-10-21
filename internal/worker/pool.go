@@ -54,17 +54,34 @@ func (p *Pool) Start(ctx context.Context) {
 	log.Printf("Worker pool started successfully")
 }
 
-// Stop gracefully shuts down the worker pool
+// Stop gracefully shuts down the worker pool with a 30-second timeout
 func (p *Pool) Stop() {
 	log.Println("Stopping worker pool...")
 	close(p.stopChan)
-	p.wg.Wait()
-	log.Println("Worker pool stopped")
+
+	// Wait for workers with timeout
+	done := make(chan struct{})
+	go func() {
+		p.wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		log.Println("Worker pool stopped gracefully")
+	case <-time.After(30 * time.Second):
+		log.Println("Warning: Worker pool shutdown timed out after 30 seconds")
+	}
 }
 
 // worker is the main loop for each worker goroutine
 func (p *Pool) worker(ctx context.Context, workerID int) {
 	defer p.wg.Done()
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Worker %d recovered from panic: %v", workerID, r)
+		}
+	}()
 
 	log.Printf("Worker %d started", workerID)
 
@@ -101,6 +118,13 @@ func (p *Pool) worker(ctx context.Context, workerID int) {
 
 // executeWithTimeout executes a job with the configured timeout
 func (p *Pool) executeWithTimeout(ctx context.Context, workerID int, j *job.Job) {
+	// Recover from panics during job execution
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("Worker %d: job %s panicked: %v", workerID, j.ID, r)
+		}
+	}()
+
 	// Create context with timeout for job execution
 	jobCtx, cancel := context.WithTimeout(ctx, p.jobTimeout)
 	defer cancel()

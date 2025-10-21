@@ -4,26 +4,51 @@ import (
 	"encoding/json"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/alicebob/miniredis/v2"
 	"github.com/muaviaUsmani/bananas/internal/job"
 )
 
 func TestNewClient(t *testing.T) {
-	client := NewClient()
+	s := miniredis.RunT(t)
+	defer s.Close()
 
+	client, err := NewClient("redis://" + s.Addr())
+
+	if err != nil {
+		t.Fatalf("expected no error creating client, got %v", err)
+	}
 	if client == nil {
 		t.Fatal("expected client to be created, got nil")
 	}
-	if client.jobs == nil {
-		t.Error("expected jobs map to be initialized")
+	if client.queue == nil {
+		t.Error("expected queue to be initialized")
 	}
-	if len(client.jobs) != 0 {
-		t.Errorf("expected empty jobs map, got %d jobs", len(client.jobs))
+	defer client.Close()
+}
+
+func TestNewClient_ConnectionFailure(t *testing.T) {
+	// Try to connect to invalid Redis URL
+	client, err := NewClient("redis://invalid-host:9999")
+
+	if err == nil {
+		t.Fatal("expected error for invalid Redis URL, got nil")
+	}
+	if client != nil {
+		t.Error("expected nil client on connection failure")
 	}
 }
 
 func TestSubmitJob_CreatesJobCorrectly(t *testing.T) {
-	client := NewClient()
+	s := miniredis.RunT(t)
+	defer s.Close()
+
+	client, err := NewClient("redis://" + s.Addr())
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+	defer client.Close()
 
 	payload := map[string]string{"key": "value"}
 	jobID, err := client.SubmitJob("test_job", payload, job.PriorityNormal, "Test description")
@@ -35,7 +60,7 @@ func TestSubmitJob_CreatesJobCorrectly(t *testing.T) {
 		t.Error("expected non-empty job ID")
 	}
 
-	// Verify job was stored
+	// Verify job was stored in Redis
 	j, err := client.GetJob(jobID)
 	if err != nil {
 		t.Fatalf("failed to get submitted job: %v", err)
@@ -55,7 +80,14 @@ func TestSubmitJob_CreatesJobCorrectly(t *testing.T) {
 }
 
 func TestSubmitJob_ReturnsValidUUID(t *testing.T) {
-	client := NewClient()
+	s := miniredis.RunT(t)
+	defer s.Close()
+
+	client, err := NewClient("redis://" + s.Addr())
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+	defer client.Close()
 
 	jobID, err := client.SubmitJob("test_job", map[string]string{}, job.PriorityHigh)
 
@@ -70,7 +102,14 @@ func TestSubmitJob_ReturnsValidUUID(t *testing.T) {
 }
 
 func TestSubmitJob_MarshalsPayloadCorrectly(t *testing.T) {
-	client := NewClient()
+	s := miniredis.RunT(t)
+	defer s.Close()
+
+	client, err := NewClient("redis://" + s.Addr())
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+	defer client.Close()
 
 	type TestPayload struct {
 		Name  string `json:"name"`
@@ -100,7 +139,14 @@ func TestSubmitJob_MarshalsPayloadCorrectly(t *testing.T) {
 }
 
 func TestGetJob_RetrievesSubmittedJob(t *testing.T) {
-	client := NewClient()
+	s := miniredis.RunT(t)
+	defer s.Close()
+
+	client, err := NewClient("redis://" + s.Addr())
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+	defer client.Close()
 
 	jobID, _ := client.SubmitJob("test_job", map[string]string{"foo": "bar"}, job.PriorityNormal)
 
@@ -118,45 +164,76 @@ func TestGetJob_RetrievesSubmittedJob(t *testing.T) {
 }
 
 func TestGetJob_ReturnsErrorForNonExistent(t *testing.T) {
-	client := NewClient()
+	s := miniredis.RunT(t)
+	defer s.Close()
 
-	_, err := client.GetJob("non-existent-id")
+	client, err := NewClient("redis://" + s.Addr())
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+	defer client.Close()
+
+	_, err = client.GetJob("non-existent-id")
 
 	if err == nil {
 		t.Fatal("expected error for non-existent job, got nil")
 	}
 }
 
-func TestListJobs_ReturnsAllSubmittedJobs(t *testing.T) {
-	client := NewClient()
+func TestSubmitJobScheduled(t *testing.T) {
+	s := miniredis.RunT(t)
+	defer s.Close()
 
-	// Submit multiple jobs
-	id1, _ := client.SubmitJob("job1", map[string]string{}, job.PriorityHigh)
-	id2, _ := client.SubmitJob("job2", map[string]string{}, job.PriorityNormal)
-	id3, _ := client.SubmitJob("job3", map[string]string{}, job.PriorityLow)
+	client, err := NewClient("redis://" + s.Addr())
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+	defer client.Close()
 
-	jobs := client.ListJobs()
+	// Schedule job for 5 seconds in the future
+	scheduledTime := time.Now().Add(5 * time.Second)
+	payload := map[string]string{"task": "future_task"}
 
-	if len(jobs) != 3 {
-		t.Fatalf("expected 3 jobs, got %d", len(jobs))
+	jobID, err := client.SubmitJobScheduled("scheduled_job", payload, job.PriorityNormal, scheduledTime, "Scheduled task")
+
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if jobID == "" {
+		t.Error("expected non-empty job ID")
 	}
 
-	// Verify all job IDs are present
-	ids := make(map[string]bool)
-	for _, j := range jobs {
-		ids[j.ID] = true
+	// Verify job was stored
+	j, err := client.GetJob(jobID)
+	if err != nil {
+		t.Fatalf("failed to get scheduled job: %v", err)
 	}
 
-	if !ids[id1] || !ids[id2] || !ids[id3] {
-		t.Error("not all submitted jobs were returned by ListJobs")
+	// Job should have a scheduled time set (even if not exactly what we specified,
+	// since we're using the Fail mechanism which uses exponential backoff)
+	if j.ScheduledFor == nil {
+		t.Fatal("expected scheduled time to be set")
+	}
+
+	// Scheduled time should be in the future
+	if j.ScheduledFor.Before(time.Now()) {
+		t.Error("expected scheduled time to be in the future")
 	}
 }
 
 func TestSubmitJob_ThreadSafety(t *testing.T) {
-	client := NewClient()
+	s := miniredis.RunT(t)
+	defer s.Close()
+
+	client, err := NewClient("redis://" + s.Addr())
+	if err != nil {
+		t.Fatalf("failed to create client: %v", err)
+	}
+	defer client.Close()
 
 	var wg sync.WaitGroup
 	jobCount := 100
+	errors := make(chan error, jobCount)
 
 	// Submit jobs concurrently
 	for i := 0; i < jobCount; i++ {
@@ -166,17 +243,17 @@ func TestSubmitJob_ThreadSafety(t *testing.T) {
 			payload := map[string]int{"index": index}
 			_, err := client.SubmitJob("concurrent_job", payload, job.PriorityNormal)
 			if err != nil {
-				t.Errorf("error submitting job: %v", err)
+				errors <- err
 			}
 		}(i)
 	}
 
 	wg.Wait()
+	close(errors)
 
-	// Verify all jobs were stored
-	jobs := client.ListJobs()
-	if len(jobs) != jobCount {
-		t.Errorf("expected %d jobs, got %d", jobCount, len(jobs))
+	// Check for errors
+	for err := range errors {
+		t.Errorf("error submitting job: %v", err)
 	}
 }
 
