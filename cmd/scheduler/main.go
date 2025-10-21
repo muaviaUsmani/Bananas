@@ -13,6 +13,32 @@ import (
 	"github.com/muaviaUsmani/bananas/internal/queue"
 )
 
+// connectWithRetry attempts to connect to Redis with exponential backoff
+func connectWithRetry(redisURL string, maxRetries int) (*queue.RedisQueue, error) {
+	var redisQueue *queue.RedisQueue
+	var err error
+
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		redisQueue, err = queue.NewRedisQueue(redisURL)
+		if err == nil {
+			return redisQueue, nil
+		}
+
+		// Calculate exponential backoff delay: 2^attempt seconds (max 30 seconds)
+		delay := time.Duration(1<<uint(attempt)) * time.Second
+		if delay > 30*time.Second {
+			delay = 30 * time.Second
+		}
+
+		log.Printf("Failed to connect to Redis (attempt %d/%d): %v. Retrying in %v...",
+			attempt+1, maxRetries, err, delay)
+
+		time.Sleep(delay)
+	}
+
+	return nil, fmt.Errorf("failed to connect to Redis after %d attempts: %w", maxRetries, err)
+}
+
 func main() {
 	// Load configuration
 	cfg, err := config.LoadConfig()
@@ -21,15 +47,17 @@ func main() {
 	}
 
 	fmt.Println("Scheduler starting...")
-	fmt.Printf("Connected to Redis: %s\n", cfg.RedisURL)
+	fmt.Printf("Connecting to Redis: %s\n", cfg.RedisURL)
 	fmt.Printf("Max retries for failed jobs: %d\n", cfg.MaxRetries)
 
-	// Connect to Redis queue
-	redisQueue, err := queue.NewRedisQueue(cfg.RedisURL)
+	// Connect to Redis queue with retry logic
+	redisQueue, err := connectWithRetry(cfg.RedisURL, 5)
 	if err != nil {
 		log.Fatalf("Failed to connect to Redis: %v", err)
 	}
 	defer redisQueue.Close()
+
+	log.Println("Successfully connected to Redis")
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
