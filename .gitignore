@@ -35,6 +35,11 @@ go.work
 /dist/
 /build/
 
+# Compiled binaries in root (from go build commands)
+/worker
+/scheduler
+/complete_workflow
+
 # Temporary files
 tmp/
 *.tmp
