@@ -1,0 +1,60 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    ports:
+      - "8080:8080"
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - .:/app
+      - /app/tmp
+    command: air -c docker/.air.api.toml
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - .:/app
+      - /app/tmp
+    command: air -c docker/.air.worker.toml
+    deploy:
+      replicas: 3
+    restart: unless-stopped
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.dev
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - REDIS_URL=redis://redis:6379
+    volumes:
+      - .:/app
+      - /app/tmp
+    command: air -c docker/.air.scheduler.toml
+    restart: unless-stopped
+

@@ -1,0 +1,36 @@
+# Git files
+.git
+.gitignore
+
+# Documentation
+README.md
+*.md
+LICENSE
+
+# Environment files
+.env
+.env.local
+.env.*
+
+# Temporary files
+tmp/
+*.tmp
+*.log
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Build artifacts
+bin/
+dist/
+build/
+
+# Docker files (no need to copy these into the image)
+docker-compose.yml
+Dockerfile*
+

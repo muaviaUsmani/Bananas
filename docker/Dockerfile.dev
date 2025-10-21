@@ -1,0 +1,27 @@
+# Development Dockerfile with hot reload support
+FROM golang:1.23-alpine
+
+# Install git and other build dependencies
+RUN apk add --no-cache git
+
+# Install air for hot reload (v1.61.1 is compatible with Go 1.23)
+RUN go install github.com/air-verse/air@v1.61.1
+
+# Add Go bin to PATH
+ENV PATH="/go/bin:${PATH}"
+
+# Set working directory
+WORKDIR /app
+
+# Copy go mod files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code (will be overridden by volume mount in dev)
+COPY . .
+
+# Default command (will be overridden in docker-compose.dev.yml)
+CMD ["air"]
+
