@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/muaviaUsmani/bananas/internal/serialization"
-	"github.com/muaviaUsmani/bananas/proto/gen"
+	tasks "github.com/muaviaUsmani/bananas/proto/gen"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -16,15 +16,17 @@ import (
 func BenchmarkProto_Marshal_SmallPayload(b *testing.B) {
 	s := serialization.NewProtobufSerializer()
 
-	task := &supplychain.PackageIngestionTask{
-		PackageName:  "test-package",
-		Version:      "1.0.0",
-		Registry:     "npm",
-		DownloadStats: 1000,
-		Maintainers:  []string{"alice", "bob"},
-		Licenses:     []string{"MIT"},
-		HomepageUrl:  "https://example.com",
-		Description:  "A test package for benchmarking",
+	task := &tasks.EmailTask{
+		To:       "user@example.com",
+		From:     "noreply@example.com",
+		Subject:  "Test Email for Benchmarking",
+		BodyText: "This is a test email body for performance benchmarking purposes.",
+		Cc:       []string{"alice@example.com", "bob@example.com"},
+		Headers: map[string]string{
+			"X-Priority": "1",
+			"X-Category": "benchmark",
+		},
+		ScheduledFor: timestamppb.Now(),
 	}
 
 	b.ResetTimer()
@@ -40,14 +42,16 @@ func BenchmarkJSON_Marshal_SmallPayload(b *testing.B) {
 	s := serialization.NewJSONSerializer()
 
 	data := map[string]interface{}{
-		"package_name":  "test-package",
-		"version":       "1.0.0",
-		"registry":      "npm",
-		"download_stats": 1000,
-		"maintainers":   []string{"alice", "bob"},
-		"licenses":      []string{"MIT"},
-		"homepage_url":  "https://example.com",
-		"description":   "A test package for benchmarking",
+		"to":       "user@example.com",
+		"from":     "noreply@example.com",
+		"subject":  "Test Email for Benchmarking",
+		"body_text": "This is a test email body for performance benchmarking purposes.",
+		"cc":       []string{"alice@example.com", "bob@example.com"},
+		"headers": map[string]string{
+			"X-Priority": "1",
+			"X-Category": "benchmark",
+		},
+		"scheduled_for": time.Now().Format(time.RFC3339),
 	}
 
 	b.ResetTimer()
@@ -62,20 +66,22 @@ func BenchmarkJSON_Marshal_SmallPayload(b *testing.B) {
 func BenchmarkProto_Unmarshal_SmallPayload(b *testing.B) {
 	s := serialization.NewProtobufSerializer()
 
-	task := &supplychain.PackageIngestionTask{
-		PackageName:  "test-package",
-		Version:      "1.0.0",
-		Registry:     "npm",
-		DownloadStats: 1000,
-		Maintainers:  []string{"alice", "bob"},
-		Licenses:     []string{"MIT"},
+	task := &tasks.EmailTask{
+		To:       "user@example.com",
+		From:     "noreply@example.com",
+		Subject:  "Test Email",
+		BodyText: "This is a test email body.",
+		Cc:       []string{"alice@example.com", "bob@example.com"},
+		Headers: map[string]string{
+			"X-Priority": "1",
+		},
 	}
 
 	bytes, _ := s.Marshal(task)
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		result := &supplychain.PackageIngestionTask{}
+		result := &tasks.EmailTask{}
 		err := s.Unmarshal(bytes, result)
 		if err != nil {
 			b.Fatalf("Unmarshal failed: %v", err)
@@ -87,12 +93,14 @@ func BenchmarkJSON_Unmarshal_SmallPayload(b *testing.B) {
 	s := serialization.NewJSONSerializer()
 
 	data := map[string]interface{}{
-		"package_name":  "test-package",
-		"version":       "1.0.0",
-		"registry":      "npm",
-		"download_stats": 1000,
-		"maintainers":   []string{"alice", "bob"},
-		"licenses":      []string{"MIT"},
+		"to":       "user@example.com",
+		"from":     "noreply@example.com",
+		"subject":  "Test Email",
+		"body_text": "This is a test email body.",
+		"cc":       []string{"alice@example.com", "bob@example.com"},
+		"headers": map[string]string{
+			"X-Priority": "1",
+		},
 	}
 
 	bytes, _ := s.Marshal(data)
@@ -111,72 +119,62 @@ func BenchmarkJSON_Unmarshal_SmallPayload(b *testing.B) {
 // BENCHMARK: Protobuf vs JSON - Medium Payload (10KB)
 // =============================================================================
 
-func createMediumProtoPayload() *supplychain.DependencyResolutionTask {
-	// Create a dependency tree with ~100 nodes
-	deps := make([]*supplychain.DependencyNode, 0, 20)
-	for i := 0; i < 20; i++ {
-		node := &supplychain.DependencyNode{
-			PackageName:  "package-" + string(rune(i)),
-			Version:      "1.0.0",
-			VersionRange: "^1.0.0",
-			Dependencies: make([]*supplychain.DependencyNode, 0, 5),
+func createMediumProtoPayload() *tasks.BatchTask {
+	// Create a batch task with ~100 items to simulate medium payload size
+	items := make([]*tasks.BatchItem, 0, 100)
+	for i := 0; i < 100; i++ {
+		item := &tasks.BatchItem{
+			ItemId: "item-" + string(rune(i)),
+			Data:   []byte("Sample data content for item " + string(rune(i))),
+			Metadata: map[string]string{
+				"type":     "batch-item",
+				"priority": "normal",
+				"index":    string(rune(i)),
+			},
 		}
-		// Add sub-dependencies
-		for j := 0; j < 5; j++ {
-			node.Dependencies = append(node.Dependencies, &supplychain.DependencyNode{
-				PackageName:  "sub-package-" + string(rune(j)),
-				Version:      "2.0.0",
-				VersionRange: ">=2.0.0",
-			})
-		}
-		deps = append(deps, node)
+		items = append(items, item)
 	}
 
-	return &supplychain.DependencyResolutionTask{
-		PackageIdentifier:      "root-package",
-		VersionRange:           "^3.0.0",
-		TransitiveDependencies: deps,
-		Metadata: &supplychain.ResolutionMetadata{
-			TotalDependencies: 120,
-			UniquePackages:    95,
-			Depth:             3,
-			ResolvedAt:        timestamppb.Now(),
-			ResolverVersion:   "1.0.0",
-			Conflicts:         []string{"conflict1", "conflict2"},
+	return &tasks.BatchTask{
+		BatchId:   "batch-benchmark-medium",
+		Operation: "process_items",
+		Items:     items,
+		Concurrency: 10,
+		CreatedAt:   timestamppb.Now(),
+		Options: &tasks.BatchOptions{
+			StopOnError:    true,
+			ReturnResults:  true,
+			TimeoutSeconds: 300,
+			ResultFormat:   "json",
 		},
 	}
 }
 
 func createMediumJSONPayload() map[string]interface{} {
-	deps := make([]map[string]interface{}, 0, 20)
-	for i := 0; i < 20; i++ {
-		subDeps := make([]map[string]interface{}, 0, 5)
-		for j := 0; j < 5; j++ {
-			subDeps = append(subDeps, map[string]interface{}{
-				"package_name":  "sub-package-" + string(rune(j)),
-				"version":       "2.0.0",
-				"version_range": ">=2.0.0",
-			})
-		}
-		deps = append(deps, map[string]interface{}{
-			"package_name":  "package-" + string(rune(i)),
-			"version":       "1.0.0",
-			"version_range": "^1.0.0",
-			"dependencies":  subDeps,
+	items := make([]map[string]interface{}, 0, 100)
+	for i := 0; i < 100; i++ {
+		items = append(items, map[string]interface{}{
+			"item_id": "item-" + string(rune(i)),
+			"data":    "Sample data content for item " + string(rune(i)),
+			"metadata": map[string]string{
+				"type":     "batch-item",
+				"priority": "normal",
+				"index":    string(rune(i)),
+			},
 		})
 	}
 
 	return map[string]interface{}{
-		"package_identifier":      "root-package",
-		"version_range":           "^3.0.0",
-		"transitive_dependencies": deps,
-		"metadata": map[string]interface{}{
-			"total_dependencies": 120,
-			"unique_packages":    95,
-			"depth":              3,
-			"resolved_at":        time.Now().Format(time.RFC3339),
-			"resolver_version":   "1.0.0",
-			"conflicts":          []string{"conflict1", "conflict2"},
+		"batch_id":   "batch-benchmark-medium",
+		"operation":  "process_items",
+		"items":      items,
+		"concurrency": 10,
+		"created_at": time.Now().Format(time.RFC3339),
+		"options": map[string]interface{}{
+			"stop_on_error":    true,
+			"return_results":   true,
+			"timeout_seconds":  300,
+			"result_format":    "json",
 		},
 	}
 }
@@ -214,7 +212,7 @@ func BenchmarkProto_Unmarshal_MediumPayload(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		result := &supplychain.DependencyResolutionTask{}
+		result := &tasks.BatchTask{}
 		err := s.Unmarshal(bytes, result)
 		if err != nil {
 			b.Fatalf("Unmarshal failed: %v", err)
@@ -241,112 +239,84 @@ func BenchmarkJSON_Unmarshal_MediumPayload(b *testing.B) {
 // BENCHMARK: Protobuf vs JSON - Large Payload (100KB+)
 // =============================================================================
 
-func createLargeProtoPayload() *supplychain.HealthMetricsTask {
-	return &supplychain.HealthMetricsTask{
-		PackageIdentifier: "large-package",
-		MaintenanceVelocity: &supplychain.MaintenanceVelocity{
-			CommitsLastMonth: 150,
-			CommitsLastYear:  1800,
-			ReleasesLastYear: 24,
-			LastCommitDate:   timestamppb.Now(),
-			LastReleaseDate:  timestamppb.Now(),
+func createLargeProtoPayload() *tasks.BatchTask {
+	// Create a large batch task with 500 items, each with substantial metadata
+	items := make([]*tasks.BatchItem, 0, 500)
+	for i := 0; i < 500; i++ {
+		// Generate large data payload for each item
+		data := make([]byte, 200) // ~200 bytes per item
+		for j := 0; j < 200; j++ {
+			data[j] = byte((i + j) % 256)
+		}
+
+		item := &tasks.BatchItem{
+			ItemId: "large-item-" + string(rune(i)),
+			Data:   data,
+			Metadata: map[string]string{
+				"type":        "large-batch-item",
+				"priority":    "high",
+				"index":       string(rune(i)),
+				"category":    "benchmark",
+				"status":      "pending",
+				"created_by":  "system",
+				"description": "Large benchmark item with substantial metadata",
+			},
+		}
+		items = append(items, item)
+	}
+
+	return &tasks.BatchTask{
+		BatchId:   "batch-benchmark-large-" + string(rune(time.Now().Unix())),
+		Operation: "process_large_batch",
+		Items:     items,
+		Concurrency: 50,
+		CreatedAt:   timestamppb.Now(),
+		Options: &tasks.BatchOptions{
+			StopOnError:    false,
+			ReturnResults:  true,
+			TimeoutSeconds: 600,
+			ResultFormat:   "protobuf",
 		},
-		ContributorMetrics: &supplychain.ContributorMetrics{
-			TotalContributors:             500,
-			ActiveContributorsLastMonth:   75,
-			ActiveContributorsLastYear:    200,
-			TopContributors:               generateStringArray(100),
-			BusFactor:                     12.5,
-		},
-		SecurityPosture: &supplychain.SecurityPosture{
-			HasSecurityPolicy:          true,
-			HasVulnerabilityDisclosure: true,
-			OpenSecurityIssues:         5,
-			ResolvedSecurityIssues:     250,
-			SecurityContacts:           []string{"security@example.com", "admin@example.com"},
-			SecurityScore:              92.5,
-		},
-		AdoptionMetrics: &supplychain.AdoptionMetrics{
-			TotalDownloads:      50000000,
-			DownloadsLastMonth:  2500000,
-			DownloadsLastWeek:   600000,
-			DependentPackages:   5000,
-			GithubStars:         25000,
-			GithubForks:         3000,
-			GithubWatchers:      1500,
-			AdoptionGrowthRate:  25.5,
-		},
-		OverallHealthScore: 91.5,
-		HealthGrade:        "A+",
-		CalculatedAt:       timestamppb.Now(),
-		ComponentScores:    generateScoresMap(50),
 	}
 }
 
 func createLargeJSONPayload() map[string]interface{} {
+	items := make([]map[string]interface{}, 0, 500)
+	for i := 0; i < 500; i++ {
+		// Generate large data payload for each item
+		data := make([]byte, 200)
+		for j := 0; j < 200; j++ {
+			data[j] = byte((i + j) % 256)
+		}
+
+		items = append(items, map[string]interface{}{
+			"item_id": "large-item-" + string(rune(i)),
+			"data":    string(data),
+			"metadata": map[string]string{
+				"type":        "large-batch-item",
+				"priority":    "high",
+				"index":       string(rune(i)),
+				"category":    "benchmark",
+				"status":      "pending",
+				"created_by":  "system",
+				"description": "Large benchmark item with substantial metadata",
+			},
+		})
+	}
+
 	return map[string]interface{}{
-		"package_identifier": "large-package",
-		"maintenance_velocity": map[string]interface{}{
-			"commits_last_month": 150,
-			"commits_last_year":  1800,
-			"releases_last_year": 24,
-			"last_commit_date":   time.Now().Format(time.RFC3339),
-			"last_release_date":  time.Now().Format(time.RFC3339),
+		"batch_id":   "batch-benchmark-large-" + string(rune(time.Now().Unix())),
+		"operation":  "process_large_batch",
+		"items":      items,
+		"concurrency": 50,
+		"created_at": time.Now().Format(time.RFC3339),
+		"options": map[string]interface{}{
+			"stop_on_error":    false,
+			"return_results":   true,
+			"timeout_seconds":  600,
+			"result_format":    "protobuf",
 		},
-		"contributor_metrics": map[string]interface{}{
-			"total_contributors":               500,
-			"active_contributors_last_month":   75,
-			"active_contributors_last_year":    200,
-			"top_contributors":                 generateStringArray(100),
-			"bus_factor":                       12.5,
-		},
-		"security_posture": map[string]interface{}{
-			"has_security_policy":           true,
-			"has_vulnerability_disclosure":  true,
-			"open_security_issues":          5,
-			"resolved_security_issues":      250,
-			"security_contacts":             []string{"security@example.com", "admin@example.com"},
-			"security_score":                92.5,
-		},
-		"adoption_metrics": map[string]interface{}{
-			"total_downloads":       50000000,
-			"downloads_last_month":  2500000,
-			"downloads_last_week":   600000,
-			"dependent_packages":    5000,
-			"github_stars":          25000,
-			"github_forks":          3000,
-			"github_watchers":       1500,
-			"adoption_growth_rate":  25.5,
-		},
-		"overall_health_score": 91.5,
-		"health_grade":         "A+",
-		"calculated_at":        time.Now().Format(time.RFC3339),
-		"component_scores":     generateScoresMapJSON(50),
 	}
-}
-
-func generateStringArray(n int) []string {
-	result := make([]string, n)
-	for i := 0; i < n; i++ {
-		result[i] = "contributor-" + string(rune(i%26+'a'))
-	}
-	return result
-}
-
-func generateScoresMap(n int) map[string]float32 {
-	result := make(map[string]float32)
-	for i := 0; i < n; i++ {
-		result["metric-"+string(rune(i%26+'a'))] = float32(i%100) + 0.5
-	}
-	return result
-}
-
-func generateScoresMapJSON(n int) map[string]interface{} {
-	result := make(map[string]interface{})
-	for i := 0; i < n; i++ {
-		result["metric-"+string(rune(i%26+'a'))] = float64(i%100) + 0.5
-	}
-	return result
 }
 
 func BenchmarkProto_Marshal_LargePayload(b *testing.B) {
@@ -382,7 +352,7 @@ func BenchmarkProto_Unmarshal_LargePayload(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		result := &supplychain.HealthMetricsTask{}
+		result := &tasks.BatchTask{}
 		err := s.Unmarshal(bytes, result)
 		if err != nil {
 			b.Fatalf("Unmarshal failed: %v", err)
@@ -413,22 +383,26 @@ func BenchmarkPayloadSize_Small(b *testing.B) {
 	protoSerializer := serialization.NewProtobufSerializer()
 	jsonSerializer := serialization.NewJSONSerializer()
 
-	task := &supplychain.PackageIngestionTask{
-		PackageName:  "test-package",
-		Version:      "1.0.0",
-		Registry:     "npm",
-		DownloadStats: 1000,
-		Maintainers:  []string{"alice", "bob"},
-		Licenses:     []string{"MIT"},
+	task := &tasks.EmailTask{
+		To:       "user@example.com",
+		From:     "noreply@example.com",
+		Subject:  "Test Email",
+		BodyText: "This is a test email body.",
+		Cc:       []string{"alice@example.com", "bob@example.com"},
+		Headers: map[string]string{
+			"X-Priority": "1",
+		},
 	}
 
 	jsonData := map[string]interface{}{
-		"package_name":  "test-package",
-		"version":       "1.0.0",
-		"registry":      "npm",
-		"download_stats": 1000,
-		"maintainers":   []string{"alice", "bob"},
-		"licenses":      []string{"MIT"},
+		"to":       "user@example.com",
+		"from":     "noreply@example.com",
+		"subject":  "Test Email",
+		"body_text": "This is a test email body.",
+		"cc":       []string{"alice@example.com", "bob@example.com"},
+		"headers": map[string]string{
+			"X-Priority": "1",
+		},
 	}
 
 	protoBytes, _ := protoSerializer.Marshal(task)
@@ -475,17 +449,17 @@ func BenchmarkPayloadSize_Large(b *testing.B) {
 
 func BenchmarkRoundTrip_Proto_Small(b *testing.B) {
 	s := serialization.NewProtobufSerializer()
-	task := &supplychain.PackageIngestionTask{
-		PackageName:  "test-package",
-		Version:      "1.0.0",
-		Registry:     "npm",
-		DownloadStats: 1000,
+	task := &tasks.EmailTask{
+		To:       "user@example.com",
+		From:     "noreply@example.com",
+		Subject:  "Test Email",
+		BodyText: "Test body",
 	}
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		bytes, _ := s.Marshal(task)
-		result := &supplychain.PackageIngestionTask{}
+		result := &tasks.EmailTask{}
 		_ = s.Unmarshal(bytes, result)
 	}
 }
@@ -493,10 +467,10 @@ func BenchmarkRoundTrip_Proto_Small(b *testing.B) {
 func BenchmarkRoundTrip_JSON_Small(b *testing.B) {
 	s := serialization.NewJSONSerializer()
 	data := map[string]interface{}{
-		"package_name":  "test-package",
-		"version":       "1.0.0",
-		"registry":      "npm",
-		"download_stats": 1000,
+		"to":       "user@example.com",
+		"from":     "noreply@example.com",
+		"subject":  "Test Email",
+		"body_text": "Test body",
 	}
 
 	b.ResetTimer()
@@ -514,7 +488,7 @@ func BenchmarkRoundTrip_Proto_Large(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		bytes, _ := s.Marshal(task)
-		result := &supplychain.HealthMetricsTask{}
+		result := &tasks.BatchTask{}
 		_ = s.Unmarshal(bytes, result)
 	}
 }

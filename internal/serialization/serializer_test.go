@@ -36,13 +36,14 @@ func TestSerializer_Marshal_JSON(t *testing.T) {
 func TestSerializer_Marshal_Protobuf(t *testing.T) {
 	s := NewProtobufSerializer()
 
-	task := &supplychain.PackageIngestionTask{
-		PackageName:  "test-package",
-		Version:      "1.0.0",
-		Registry:     "npm",
-		DownloadStats: 1000,
-		Maintainers:  []string{"alice", "bob"},
-		Licenses:     []string{"MIT"},
+	task := &tasks.EmailTask{
+		To:      "user@example.com",
+		From:    "noreply@example.com",
+		Subject: "Test Email",
+		BodyText: "This is a test email",
+		Headers: map[string]string{
+			"X-Priority": "1",
+		},
 	}
 
 	bytes, err := s.Marshal(task)
@@ -58,7 +59,7 @@ func TestSerializer_Marshal_Protobuf(t *testing.T) {
 	// Protobuf encodes strings as length-delimited fields, so text may be visible
 	// The important thing is that it's not JSON format (no quotes, braces, etc.)
 	payload := string(bytes[1:])
-	if strings.Contains(payload, `"package_name"`) || strings.Contains(payload, `{`) {
+	if strings.Contains(payload, `"to"`) || strings.Contains(payload, `{`) {
 		t.Errorf("Protobuf should not be in JSON format")
 	}
 }
@@ -90,13 +91,16 @@ func TestSerializer_Unmarshal_JSON(t *testing.T) {
 func TestSerializer_Unmarshal_Protobuf(t *testing.T) {
 	s := NewProtobufSerializer()
 
-	original := &supplychain.PackageIngestionTask{
-		PackageName:  "test-package",
-		Version:      "1.0.0",
-		Registry:     "npm",
-		DownloadStats: 1000,
-		Maintainers:  []string{"alice", "bob"},
-		Licenses:     []string{"MIT", "Apache-2.0"},
+	original := &tasks.EmailTask{
+		To:       "user@example.com",
+		From:     "noreply@example.com",
+		Subject:  "Test Email",
+		BodyText: "This is a test email",
+		Cc:       []string{"cc1@example.com", "cc2@example.com"},
+		Headers: map[string]string{
+			"X-Priority": "1",
+			"X-Custom":   "value",
+		},
 	}
 
 	bytes, err := s.Marshal(original)
@@ -104,22 +108,22 @@ func TestSerializer_Unmarshal_Protobuf(t *testing.T) {
 		t.Fatalf("Marshal failed: %v", err)
 	}
 
-	result := &supplychain.PackageIngestionTask{}
+	result := &tasks.EmailTask{}
 	if err := s.Unmarshal(bytes, result); err != nil {
 		t.Fatalf("Unmarshal failed: %v", err)
 	}
 
-	if result.PackageName != original.PackageName {
-		t.Errorf("PackageName mismatch: got %s, want %s", result.PackageName, original.PackageName)
+	if result.To != original.To {
+		t.Errorf("To mismatch: got %s, want %s", result.To, original.To)
 	}
-	if result.Version != original.Version {
-		t.Errorf("Version mismatch: got %s, want %s", result.Version, original.Version)
+	if result.Subject != original.Subject {
+		t.Errorf("Subject mismatch: got %s, want %s", result.Subject, original.Subject)
 	}
-	if result.DownloadStats != original.DownloadStats {
-		t.Errorf("DownloadStats mismatch: got %d, want %d", result.DownloadStats, original.DownloadStats)
+	if len(result.Cc) != len(original.Cc) {
+		t.Errorf("Cc length mismatch: got %d, want %d", len(result.Cc), len(original.Cc))
 	}
-	if len(result.Maintainers) != len(original.Maintainers) {
-		t.Errorf("Maintainers length mismatch: got %d, want %d", len(result.Maintainers), len(original.Maintainers))
+	if len(result.Headers) != len(original.Headers) {
+		t.Errorf("Headers length mismatch: got %d, want %d", len(result.Headers), len(original.Headers))
 	}
 }
 
@@ -377,7 +381,7 @@ func TestSerializer_ErrorCases(t *testing.T) {
 
 	t.Run("Malformed protobuf", func(t *testing.T) {
 		data := []byte{byte(FormatProtobuf), 0xFF, 0xFF, 0xFF}
-		result := &supplychain.PackageIngestionTask{}
+		result := &tasks.EmailTask{}
 		err := s.Unmarshal(data, result)
 		if err == nil {
 			t.Errorf("Expected error for malformed protobuf")
@@ -397,47 +401,84 @@ func TestSerializer_ErrorCases(t *testing.T) {
 func TestSerializer_RoundTrip_ComplexProto(t *testing.T) {
 	s := NewProtobufSerializer()
 
-	original := &supplychain.HealthMetricsTask{
-		PackageIdentifier: "example/package",
-		MaintenanceVelocity: &supplychain.MaintenanceVelocity{
-			CommitsLastMonth: 50,
-			CommitsLastYear:  500,
-			ReleasesLastYear: 12,
-			LastCommitDate:   timestamppb.Now(),
-			LastReleaseDate:  timestamppb.Now(),
+	original := &tasks.NotificationTask{
+		RecipientId: "user-123",
+		Channel:     "email",
+		Title:       "Important Notification",
+		Message:     "This is an important message that needs your attention.",
+		Metadata: map[string]string{
+			"category": "alert",
+			"source":   "system",
+			"urgency":  "high",
 		},
-		ContributorMetrics: &supplychain.ContributorMetrics{
-			TotalContributors:             100,
-			ActiveContributorsLastMonth:   20,
-			ActiveContributorsLastYear:    50,
-			TopContributors:               []string{"alice", "bob", "carol"},
-			BusFactor:                     3.5,
+		Priority:  tasks.NotificationPriority_NOTIFICATION_PRIORITY_HIGH,
+		CreatedAt: timestamppb.Now(),
+	}
+
+	bytes, err := s.Marshal(original)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+
+	result := &tasks.NotificationTask{}
+	if err := s.Unmarshal(bytes, result); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	// Verify key fields
+	if result.RecipientId != original.RecipientId {
+		t.Errorf("RecipientId mismatch")
+	}
+	if result.Channel != original.Channel {
+		t.Errorf("Channel mismatch")
+	}
+	if result.Title != original.Title {
+		t.Errorf("Title mismatch")
+	}
+	if result.Priority != original.Priority {
+		t.Errorf("Priority mismatch")
+	}
+
+	// Verify map
+	if len(result.Metadata) != len(original.Metadata) {
+		t.Errorf("Metadata map length mismatch")
+	}
+	for k, v := range original.Metadata {
+		if result.Metadata[k] != v {
+			t.Errorf("Metadata mismatch for key %s", k)
+		}
+	}
+}
+
+func TestSerializer_BatchTask(t *testing.T) {
+	s := NewProtobufSerializer()
+
+	original := &tasks.BatchTask{
+		BatchId:   "batch-123",
+		Operation: "process_orders",
+		Items: []*tasks.BatchItem{
+			{
+				ItemId: "item-1",
+				Data:   []byte("data-1"),
+				Metadata: map[string]string{
+					"type": "order",
+				},
+			},
+			{
+				ItemId: "item-2",
+				Data:   []byte("data-2"),
+				Metadata: map[string]string{
+					"type": "order",
+				},
+			},
 		},
-		SecurityPosture: &supplychain.SecurityPosture{
-			HasSecurityPolicy:          true,
-			HasVulnerabilityDisclosure: true,
-			OpenSecurityIssues:         2,
-			ResolvedSecurityIssues:     15,
-			SecurityContacts:           []string{"security@example.com"},
-			SecurityScore:              85.5,
-		},
-		AdoptionMetrics: &supplychain.AdoptionMetrics{
-			TotalDownloads:      1000000,
-			DownloadsLastMonth:  50000,
-			DownloadsLastWeek:   12000,
-			DependentPackages:   250,
-			GithubStars:         1500,
-			GithubForks:         200,
-			GithubWatchers:      100,
-			AdoptionGrowthRate:  15.5,
-		},
-		OverallHealthScore: 88.5,
-		HealthGrade:        "A",
-		CalculatedAt:       timestamppb.Now(),
-		ComponentScores: map[string]float32{
-			"maintenance": 90.0,
-			"security":    85.5,
-			"adoption":    92.0,
+		Concurrency: 10,
+		CreatedAt:   timestamppb.Now(),
+		Options: &tasks.BatchOptions{
+			StopOnError:   true,
+			ReturnResults: true,
+			TimeoutSeconds: 300,
+			ResultFormat:  "json",
 		},
 	}
 
@@ -446,30 +487,59 @@ func TestSerializer_RoundTrip_ComplexProto(t *testing.T) {
 		t.Fatalf("Marshal failed: %v", err)
 	}
 
-	result := &supplychain.HealthMetricsTask{}
+	result := &tasks.BatchTask{}
 	if err := s.Unmarshal(bytes, result); err != nil {
 		t.Fatalf("Unmarshal failed: %v", err)
 	}
 
-	// Verify key fields
-	if result.PackageIdentifier != original.PackageIdentifier {
-		t.Errorf("PackageIdentifier mismatch")
+	if result.BatchId != original.BatchId {
+		t.Errorf("BatchId mismatch")
 	}
-	if result.OverallHealthScore != original.OverallHealthScore {
-		t.Errorf("OverallHealthScore mismatch")
+	if len(result.Items) != len(original.Items) {
+		t.Errorf("Items length mismatch")
 	}
-	if result.HealthGrade != original.HealthGrade {
-		t.Errorf("HealthGrade mismatch")
+	if result.Options.StopOnError != original.Options.StopOnError {
+		t.Errorf("Options.StopOnError mismatch")
+	}
+}
+
+func TestSerializer_WebhookTask(t *testing.T) {
+	s := NewProtobufSerializer()
+
+	original := &tasks.WebhookTask{
+		Url:    "https://api.example.com/webhook",
+		Method: "POST",
+		Headers: map[string]string{
+			"Content-Type":  "application/json",
+			"Authorization": "Bearer token123",
+		},
+		Payload:        []byte(`{"event": "user_created", "data": {"id": 123}}`),
+		TimeoutSeconds: 30,
+		MaxRetries:     3,
+		VerifySsl:      true,
+		CreatedAt:      timestamppb.Now(),
 	}
 
-	// Verify nested messages
-	if result.MaintenanceVelocity.CommitsLastMonth != original.MaintenanceVelocity.CommitsLastMonth {
-		t.Errorf("Nested field mismatch: CommitsLastMonth")
+	bytes, err := s.Marshal(original)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
 	}
-	if len(result.ContributorMetrics.TopContributors) != len(original.ContributorMetrics.TopContributors) {
-		t.Errorf("Nested array length mismatch")
+
+	result := &tasks.WebhookTask{}
+	if err := s.Unmarshal(bytes, result); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
 	}
-	if len(result.ComponentScores) != len(original.ComponentScores) {
-		t.Errorf("Map length mismatch")
+
+	if result.Url != original.Url {
+		t.Errorf("URL mismatch")
+	}
+	if result.Method != original.Method {
+		t.Errorf("Method mismatch")
+	}
+	if string(result.Payload) != string(original.Payload) {
+		t.Errorf("Payload mismatch")
+	}
+	if len(result.Headers) != len(original.Headers) {
+		t.Errorf("Headers length mismatch")
 	}
 }

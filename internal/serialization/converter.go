@@ -9,94 +9,145 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// JSONToProtoPackageIngestion converts a JSON payload to PackageIngestionTask
-func JSONToProtoPackageIngestion(jsonData map[string]interface{}) (*supplychain.PackageIngestionTask, error) {
-	task := &supplychain.PackageIngestionTask{}
+// JSONToProtoEmail converts a JSON payload to EmailTask
+func JSONToProtoEmail(jsonData map[string]interface{}) (*tasks.EmailTask, error) {
+	task := &tasks.EmailTask{}
 
-	if v, ok := jsonData["package_name"].(string); ok {
-		task.PackageName = v
+	if v, ok := jsonData["to"].(string); ok {
+		task.To = v
 	}
-	if v, ok := jsonData["version"].(string); ok {
-		task.Version = v
+	if v, ok := jsonData["from"].(string); ok {
+		task.From = v
 	}
-	if v, ok := jsonData["registry"].(string); ok {
-		task.Registry = v
+	if v, ok := jsonData["subject"].(string); ok {
+		task.Subject = v
 	}
-	if v, ok := jsonData["download_stats"].(float64); ok {
-		task.DownloadStats = int64(v)
+	if v, ok := jsonData["body_text"].(string); ok {
+		task.BodyText = v
+	}
+	if v, ok := jsonData["body_html"].(string); ok {
+		task.BodyHtml = v
 	}
 
 	// Handle array fields
-	if v, ok := jsonData["maintainers"].([]interface{}); ok {
-		maintainers := make([]string, len(v))
-		for i, m := range v {
-			if s, ok := m.(string); ok {
-				maintainers[i] = s
+	if v, ok := jsonData["cc"].([]interface{}); ok {
+		cc := make([]string, len(v))
+		for i, item := range v {
+			if s, ok := item.(string); ok {
+				cc[i] = s
 			}
 		}
-		task.Maintainers = maintainers
+		task.Cc = cc
 	}
 
-	if v, ok := jsonData["licenses"].([]interface{}); ok {
-		licenses := make([]string, len(v))
-		for i, l := range v {
-			if s, ok := l.(string); ok {
-				licenses[i] = s
+	if v, ok := jsonData["bcc"].([]interface{}); ok {
+		bcc := make([]string, len(v))
+		for i, item := range v {
+			if s, ok := item.(string); ok {
+				bcc[i] = s
 			}
 		}
-		task.Licenses = licenses
+		task.Bcc = bcc
+	}
+
+	// Handle headers map
+	if v, ok := jsonData["headers"].(map[string]interface{}); ok {
+		task.Headers = make(map[string]string)
+		for k, val := range v {
+			if s, ok := val.(string); ok {
+				task.Headers[k] = s
+			}
+		}
 	}
 
 	// Handle timestamp
-	if v, ok := jsonData["publish_timestamp"].(string); ok {
+	if v, ok := jsonData["scheduled_for"].(string); ok {
 		if t, err := time.Parse(time.RFC3339, v); err == nil {
-			task.PublishTimestamp = timestamppb.New(t)
-		}
-	}
-
-	// Additional fields
-	if v, ok := jsonData["homepage_url"].(string); ok {
-		task.HomepageUrl = v
-	}
-	if v, ok := jsonData["repository_url"].(string); ok {
-		task.RepositoryUrl = v
-	}
-	if v, ok := jsonData["description"].(string); ok {
-		task.Description = v
-	}
-
-	// Metadata map
-	if v, ok := jsonData["metadata"].(map[string]interface{}); ok {
-		task.Metadata = make(map[string]string)
-		for k, val := range v {
-			if s, ok := val.(string); ok {
-				task.Metadata[k] = s
-			}
+			task.ScheduledFor = timestamppb.New(t)
 		}
 	}
 
 	return task, nil
 }
 
-// ProtoToJSONPackageIngestion converts PackageIngestionTask to JSON-compatible map
-func ProtoToJSONPackageIngestion(task *supplychain.PackageIngestionTask) (map[string]interface{}, error) {
+// ProtoToJSONEmail converts EmailTask to JSON-compatible map
+func ProtoToJSONEmail(task *tasks.EmailTask) (map[string]interface{}, error) {
 	result := make(map[string]interface{})
 
-	result["package_name"] = task.PackageName
-	result["version"] = task.Version
-	result["registry"] = task.Registry
-	result["download_stats"] = task.DownloadStats
-	result["maintainers"] = task.Maintainers
-	result["licenses"] = task.Licenses
+	result["to"] = task.To
+	result["from"] = task.From
+	result["subject"] = task.Subject
+	result["body_text"] = task.BodyText
+	result["body_html"] = task.BodyHtml
+	result["cc"] = task.Cc
+	result["bcc"] = task.Bcc
+	result["headers"] = task.Headers
 
-	if task.PublishTimestamp != nil {
-		result["publish_timestamp"] = task.PublishTimestamp.AsTime().Format(time.RFC3339)
+	if task.ScheduledFor != nil {
+		result["scheduled_for"] = task.ScheduledFor.AsTime().Format(time.RFC3339)
 	}
 
-	result["homepage_url"] = task.HomepageUrl
-	result["repository_url"] = task.RepositoryUrl
-	result["description"] = task.Description
-	result["metadata"] = task.Metadata
+	return result, nil
+}
+
+// JSONToProtoGeneric converts a JSON payload to GenericTask
+func JSONToProtoGeneric(jsonData map[string]interface{}) (*tasks.GenericTask, error) {
+	task := &tasks.GenericTask{}
+
+	if v, ok := jsonData["task_id"].(string); ok {
+		task.TaskId = v
+	}
+	if v, ok := jsonData["task_type"].(string); ok {
+		task.TaskType = v
+	}
+	if v, ok := jsonData["priority"].(float64); ok {
+		task.Priority = int32(v)
+	}
+
+	// Handle data map
+	if v, ok := jsonData["data"].(map[string]interface{}); ok {
+		task.Data = make(map[string]string)
+		for k, val := range v {
+			if s, ok := val.(string); ok {
+				task.Data[k] = s
+			}
+		}
+	}
+
+	// Handle tags array
+	if v, ok := jsonData["tags"].([]interface{}); ok {
+		tags := make([]string, len(v))
+		for i, item := range v {
+			if s, ok := item.(string); ok {
+				tags[i] = s
+			}
+		}
+		task.Tags = tags
+	}
+
+	// Handle timestamp
+	if v, ok := jsonData["created_at"].(string); ok {
+		if t, err := time.Parse(time.RFC3339, v); err == nil {
+			task.CreatedAt = timestamppb.New(t)
+		}
+	}
+
+	return task, nil
+}
+
+// ProtoToJSONGeneric converts GenericTask to JSON-compatible map
+func ProtoToJSONGeneric(task *tasks.GenericTask) (map[string]interface{}, error) {
+	result := make(map[string]interface{})
+
+	result["task_id"] = task.TaskId
+	result["task_type"] = task.TaskType
+	result["priority"] = task.Priority
+	result["data"] = task.Data
+	result["tags"] = task.Tags
+
+	if task.CreatedAt != nil {
+		result["created_at"] = task.CreatedAt.AsTime().Format(time.RFC3339)
+	}
 
 	return result, nil
 }
@@ -110,25 +161,27 @@ func ToProtoMessage(taskType string, payload []byte) (interface{}, error) {
 	}
 
 	switch taskType {
-	case "package_ingestion":
-		return JSONToProtoPackageIngestion(jsonData)
-	case "dependency_resolution":
-		// TODO: Implement other converters as needed
-		return nil, fmt.Errorf("converter not implemented for task type: %s", taskType)
-	case "vulnerability_scan":
-		return nil, fmt.Errorf("converter not implemented for task type: %s", taskType)
-	case "health_metrics":
-		return nil, fmt.Errorf("converter not implemented for task type: %s", taskType)
+	case "email":
+		return JSONToProtoEmail(jsonData)
+	case "generic":
+		return JSONToProtoGeneric(jsonData)
 	default:
-		return nil, fmt.Errorf("unknown task type: %s", taskType)
+		// For unknown types, use GenericTask
+		return JSONToProtoGeneric(jsonData)
 	}
 }
 
 // FromProtoMessage converts a protobuf message to a JSON payload
 func FromProtoMessage(msg interface{}) ([]byte, error) {
 	switch v := msg.(type) {
-	case *supplychain.PackageIngestionTask:
-		jsonMap, err := ProtoToJSONPackageIngestion(v)
+	case *tasks.EmailTask:
+		jsonMap, err := ProtoToJSONEmail(v)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(jsonMap)
+	case *tasks.GenericTask:
+		jsonMap, err := ProtoToJSONGeneric(v)
 		if err != nil {
 			return nil, err
 		}
