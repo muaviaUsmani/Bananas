@@ -1,0 +1,173 @@
+syntax = "proto3";
+
+package bananas.supplychain;
+
+option go_package = "github.com/muaviaUsmani/bananas/proto/gen;supplychain";
+
+import "google/protobuf/timestamp.proto";
+
+// PackageIngestionTask represents a task to ingest package metadata
+message PackageIngestionTask {
+  string package_name = 1;
+  string version = 2;
+  string registry = 3;
+  int64 download_stats = 4;
+  repeated string maintainers = 5;
+  repeated string licenses = 6;
+  google.protobuf.Timestamp publish_timestamp = 7;
+
+  // Additional metadata
+  string homepage_url = 8;
+  string repository_url = 9;
+  string description = 10;
+  map<string, string> metadata = 11;
+}
+
+// DependencyNode represents a single dependency in the tree
+message DependencyNode {
+  string package_name = 1;
+  string version = 2;
+  string version_range = 3;
+  repeated DependencyNode dependencies = 4;  // Transitive dependencies
+  bool is_dev_dependency = 5;
+  bool is_optional = 6;
+}
+
+// DependencyResolutionTask represents a task to resolve package dependencies
+message DependencyResolutionTask {
+  string package_identifier = 1;
+  string version_range = 2;
+  repeated DependencyNode transitive_dependencies = 3;
+
+  // Resolution metadata
+  ResolutionMetadata metadata = 4;
+}
+
+// ResolutionMetadata contains metadata about the dependency resolution process
+message ResolutionMetadata {
+  int32 total_dependencies = 1;
+  int32 unique_packages = 2;
+  int32 depth = 3;
+  google.protobuf.Timestamp resolved_at = 4;
+  string resolver_version = 5;
+  repeated string conflicts = 6;
+}
+
+// VulnerabilityInfo represents detailed vulnerability information
+message VulnerabilityInfo {
+  string cve_id = 1;
+  repeated string affected_packages = 2;
+  float severity_score = 3;  // CVSS score (0.0 - 10.0)
+  string cvss_vector = 4;
+  string description = 5;
+  RemediationData remediation = 6;
+
+  // Additional vulnerability details
+  string severity_level = 7;  // CRITICAL, HIGH, MEDIUM, LOW
+  repeated string cwe_ids = 8;  // Common Weakness Enumeration IDs
+  google.protobuf.Timestamp published_date = 9;
+  google.protobuf.Timestamp last_modified_date = 10;
+  repeated string references = 11;  // URLs to advisories, patches, etc.
+}
+
+// RemediationData contains information on how to remediate the vulnerability
+message RemediationData {
+  repeated string patched_versions = 1;
+  string workaround = 2;
+  repeated string patches = 3;  // URLs to patches
+  string recommendation = 4;
+}
+
+// VulnerabilityScanTask represents a task to scan for vulnerabilities
+message VulnerabilityScanTask {
+  repeated VulnerabilityInfo vulnerabilities = 1;
+  string scan_target = 2;  // Package or manifest file scanned
+  google.protobuf.Timestamp scan_timestamp = 3;
+  ScanMetadata metadata = 4;
+}
+
+// ScanMetadata contains metadata about the vulnerability scan
+message ScanMetadata {
+  string scanner_name = 1;
+  string scanner_version = 2;
+  int32 total_vulnerabilities = 3;
+  int32 critical_count = 4;
+  int32 high_count = 5;
+  int32 medium_count = 6;
+  int32 low_count = 7;
+  float scan_duration_seconds = 8;
+}
+
+// MaintenanceVelocity represents package maintenance activity metrics
+message MaintenanceVelocity {
+  int32 commits_last_month = 1;
+  int32 commits_last_year = 2;
+  int32 releases_last_year = 3;
+  google.protobuf.Timestamp last_commit_date = 4;
+  google.protobuf.Timestamp last_release_date = 5;
+  float avg_issue_resolution_days = 6;
+  float avg_pr_merge_days = 7;
+}
+
+// ContributorMetrics represents contributor-related metrics
+message ContributorMetrics {
+  int32 total_contributors = 1;
+  int32 active_contributors_last_month = 2;
+  int32 active_contributors_last_year = 3;
+  repeated string top_contributors = 4;
+  float bus_factor = 5;  // Minimum number of contributors whose removal would harm the project
+}
+
+// SecurityPosture represents security-related metrics
+message SecurityPosture {
+  bool has_security_policy = 1;
+  bool has_vulnerability_disclosure = 2;
+  int32 open_security_issues = 3;
+  int32 resolved_security_issues = 4;
+  google.protobuf.Timestamp last_security_audit = 5;
+  repeated string security_contacts = 6;
+  float security_score = 7;  // 0.0 - 100.0
+}
+
+// AdoptionMetrics represents package adoption and usage metrics
+message AdoptionMetrics {
+  int64 total_downloads = 1;
+  int64 downloads_last_month = 2;
+  int64 downloads_last_week = 3;
+  int32 dependent_packages = 4;
+  int32 github_stars = 5;
+  int32 github_forks = 6;
+  int32 github_watchers = 7;
+  float adoption_growth_rate = 8;  // Percentage growth rate
+}
+
+// HealthMetricsTask represents a task to calculate package health metrics
+message HealthMetricsTask {
+  string package_identifier = 1;
+  MaintenanceVelocity maintenance_velocity = 2;
+  ContributorMetrics contributor_metrics = 3;
+  SecurityPosture security_posture = 4;
+  AdoptionMetrics adoption_metrics = 5;
+
+  // Overall health score
+  float overall_health_score = 6;  // 0.0 - 100.0
+  string health_grade = 7;  // A, B, C, D, F
+  google.protobuf.Timestamp calculated_at = 8;
+  map<string, float> component_scores = 9;  // Breakdown of score components
+}
+
+// TaskPayloadWrapper wraps any task type for polymorphic handling
+message TaskPayloadWrapper {
+  oneof payload {
+    PackageIngestionTask package_ingestion = 1;
+    DependencyResolutionTask dependency_resolution = 2;
+    VulnerabilityScanTask vulnerability_scan = 3;
+    HealthMetricsTask health_metrics = 4;
+  }
+
+  // Common metadata for all tasks
+  string task_id = 10;
+  string task_type = 11;
+  google.protobuf.Timestamp created_at = 12;
+  map<string, string> labels = 13;
+}
