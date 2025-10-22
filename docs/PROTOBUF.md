@@ -21,23 +21,25 @@ The implementation is **fully backward compatible** - existing JSON payloads con
 ```go
 import (
     "github.com/muaviaUsmani/bananas/internal/job"
-    "github.com/muaviaUsmani/bananas/proto/gen"
+    tasks "github.com/muaviaUsmani/bananas/proto/gen"
     "google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Create a protobuf payload
-task := &supplychain.PackageIngestionTask{
-    PackageName:  "react",
-    Version:      "18.2.0",
-    Registry:     "npm",
-    DownloadStats: 15000000,
-    Maintainers:  []string{"facebook", "react-team"},
-    Licenses:     []string{"MIT"},
-    PublishTimestamp: timestamppb.Now(),
+task := &tasks.EmailTask{
+    To:      "user@example.com",
+    From:    "noreply@example.com",
+    Subject: "Welcome to Bananas!",
+    BodyText: "Thank you for signing up for our task queue system.",
+    Cc:      []string{"admin@example.com"},
+    Headers: map[string]string{
+        "X-Priority": "high",
+    },
+    ScheduledFor: timestamppb.Now(),
 }
 
 // Create job with protobuf payload
-j, err := job.NewJobWithProto("package_ingestion", task, job.PriorityHigh)
+j, err := job.NewJobWithProto("send_email", task, job.PriorityHigh)
 if err != nil {
     log.Fatalf("Failed to create job: %v", err)
 }
@@ -50,15 +52,15 @@ queue.Enqueue(ctx, j)
 
 ```go
 // In your job handler
-func HandlePackageIngestion(ctx context.Context, j *job.Job) error {
+func HandleSendEmail(ctx context.Context, j *job.Job) error {
     // Unmarshal protobuf payload
-    task := &supplychain.PackageIngestionTask{}
+    task := &tasks.EmailTask{}
     if err := j.UnmarshalPayloadProto(task); err != nil {
         return fmt.Errorf("failed to unmarshal payload: %w", err)
     }
 
     // Process the task
-    log.Printf("Processing package: %s@%s", task.PackageName, task.Version)
+    log.Printf("Sending email to: %s, subject: %s", task.To, task.Subject)
 
     // ... your logic here ...
 
@@ -73,11 +75,12 @@ Existing JSON payloads work without any changes:
 ```go
 // Old code - still works!
 payload := map[string]interface{}{
-    "package_name": "react",
-    "version":      "18.2.0",
+    "to":      "user@example.com",
+    "from":    "noreply@example.com",
+    "subject": "Welcome!",
 }
 payloadBytes, _ := json.Marshal(payload)
-j := job.NewJob("package_ingestion", payloadBytes, job.PriorityNormal)
+j := job.NewJob("send_email", payloadBytes, job.PriorityNormal)
 ```
 
 The system **automatically detects** whether a payload is JSON or protobuf and handles it appropriately.
@@ -86,63 +89,81 @@ The system **automatically detects** whether a payload is JSON or protobuf and h
 
 ## Available Proto Messages
 
-All proto definitions are in `proto/supplychain.proto`. Currently available messages:
+All proto definitions are in `proto/tasks.proto`. Currently available messages:
 
-### PackageIngestionTask
-Ingest package metadata from registries (npm, PyPI, etc.):
+### EmailTask
+Send email messages:
 ```protobuf
-message PackageIngestionTask {
-  string package_name = 1;
-  string version = 2;
-  string registry = 3;
-  int64 download_stats = 4;
-  repeated string maintainers = 5;
-  repeated string licenses = 6;
-  google.protobuf.Timestamp publish_timestamp = 7;
-  string homepage_url = 8;
-  string repository_url = 9;
-  string description = 10;
-  map<string, string> metadata = 11;
+message EmailTask {
+  string to = 1;
+  repeated string cc = 2;
+  repeated string bcc = 3;
+  string from = 4;
+  string subject = 5;
+  string body_text = 6;
+  string body_html = 7;
+  repeated Attachment attachments = 8;
+  map<string, string> headers = 9;
+  google.protobuf.Timestamp scheduled_for = 10;
 }
 ```
 
-### DependencyResolutionTask
-Resolve and track dependency trees:
+### WebhookTask
+Call external webhooks:
 ```protobuf
-message DependencyResolutionTask {
-  string package_identifier = 1;
-  string version_range = 2;
-  repeated DependencyNode transitive_dependencies = 3;
-  ResolutionMetadata metadata = 4;
+message WebhookTask {
+  string url = 1;
+  string method = 2;  // GET, POST, PUT, DELETE, PATCH
+  map<string, string> headers = 3;
+  bytes payload = 4;
+  int32 timeout_seconds = 5;
+  int32 max_retries = 6;
+  bool verify_ssl = 7;
+  google.protobuf.Timestamp created_at = 8;
 }
 ```
 
-### VulnerabilityScanTask
-Track security vulnerabilities:
+### NotificationTask
+Send notifications via various channels:
 ```protobuf
-message VulnerabilityScanTask {
-  repeated VulnerabilityInfo vulnerabilities = 1;
-  string scan_target = 2;
-  google.protobuf.Timestamp scan_timestamp = 3;
-  ScanMetadata metadata = 4;
+message NotificationTask {
+  string recipient_id = 1;
+  string channel = 2;  // email, sms, push, slack, etc.
+  string title = 3;
+  string message = 4;
+  map<string, string> metadata = 5;
+  NotificationPriority priority = 6;
+  google.protobuf.Timestamp created_at = 7;
 }
 ```
 
-### HealthMetricsTask
-Calculate package health scores:
+### BatchTask
+Process multiple items in batch:
 ```protobuf
-message HealthMetricsTask {
-  string package_identifier = 1;
-  MaintenanceVelocity maintenance_velocity = 2;
-  ContributorMetrics contributor_metrics = 3;
-  SecurityPosture security_posture = 4;
-  AdoptionMetrics adoption_metrics = 5;
-  float overall_health_score = 6;
-  string health_grade = 7;
+message BatchTask {
+  string batch_id = 1;
+  repeated BatchItem items = 2;
+  string operation = 3;
+  int32 concurrency = 4;
+  google.protobuf.Timestamp created_at = 5;
+  BatchOptions options = 6;
 }
 ```
 
-See `proto/supplychain.proto` for complete definitions.
+### GenericTask
+Flexible key-value task for custom use cases:
+```protobuf
+message GenericTask {
+  string task_id = 1;
+  string task_type = 2;
+  map<string, string> data = 3;
+  google.protobuf.Timestamp created_at = 4;
+  int32 priority = 5;
+  repeated string tags = 6;
+}
+```
+
+See `proto/tasks.proto` for complete definitions.
 
 ---
 
@@ -208,7 +229,7 @@ The serialization layer automatically handles format detection:
 ```go
 // Works with both JSON and protobuf!
 func MyHandler(ctx context.Context, j *job.Job) error {
-    task := &supplychain.PackageIngestionTask{}
+    task := &tasks.EmailTask{}
 
     // Automatically detects format and deserializes
     if err := j.UnmarshalPayloadProto(task); err != nil {
@@ -226,7 +247,7 @@ func MyHandler(ctx context.Context, j *job.Job) error {
 
 ### 1. Define Your Proto Message
 
-Edit `proto/supplychain.proto`:
+Edit `proto/tasks.proto`:
 
 ```protobuf
 message MyCustomTask {
@@ -246,16 +267,16 @@ go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
 
 # Regenerate Go code
 export PATH="$PATH:$(go env GOPATH)/bin"
-protoc --go_out=. --go_opt=paths=source_relative proto/supplychain.proto
-mv proto/supplychain.pb.go proto/gen/
+protoc --go_out=. --go_opt=paths=source_relative proto/tasks.proto
+mv proto/tasks.pb.go proto/gen/
 ```
 
 ### 3. Use in Your Code
 
 ```go
-import "github.com/muaviaUsmani/bananas/proto/gen"
+import tasks "github.com/muaviaUsmani/bananas/proto/gen"
 
-task := &supplychain.MyCustomTask{
+task := &tasks.MyCustomTask{
     TaskId:      "task-123",
     Description: "Process user data",
     Tags:        []string{"urgent", "user-facing"},
@@ -274,48 +295,48 @@ j, err := job.NewJobWithProto("my_custom_task", task, job.PriorityHigh)
 **Before (JSON):**
 ```go
 payload := map[string]interface{}{
-    "package_name": "react",
-    "version":      "18.2.0",
-    "registry":     "npm",
+    "to":      "user@example.com",
+    "from":    "noreply@example.com",
+    "subject": "Welcome",
 }
 payloadBytes, _ := json.Marshal(payload)
-j := job.NewJob("package_ingestion", payloadBytes, job.PriorityNormal)
+j := job.NewJob("send_email", payloadBytes, job.PriorityNormal)
 ```
 
 **After (Protobuf):**
 ```go
-task := &supplychain.PackageIngestionTask{
-    PackageName: "react",
-    Version:     "18.2.0",
-    Registry:    "npm",
+task := &tasks.EmailTask{
+    To:      "user@example.com",
+    From:    "noreply@example.com",
+    Subject: "Welcome",
 }
-j, err := job.NewJobWithProto("package_ingestion", task, job.PriorityNormal)
+j, err := job.NewJobWithProto("send_email", task, job.PriorityNormal)
 ```
 
 ### Handler Migration
 
 **Before:**
 ```go
-func HandlePackageIngestion(ctx context.Context, j *job.Job) error {
+func HandleSendEmail(ctx context.Context, j *job.Job) error {
     var payload map[string]interface{}
     if err := json.Unmarshal(j.Payload, &payload); err != nil {
         return err
     }
 
-    packageName := payload["package_name"].(string)
+    to := payload["to"].(string)
     // ...
 }
 ```
 
 **After:**
 ```go
-func HandlePackageIngestion(ctx context.Context, j *job.Job) error {
-    task := &supplychain.PackageIngestionTask{}
+func HandleSendEmail(ctx context.Context, j *job.Job) error {
+    task := &tasks.EmailTask{}
     if err := j.UnmarshalPayloadProto(task); err != nil {
         return err
     }
 
-    packageName := task.PackageName  // Type-safe!
+    to := task.To  // Type-safe!
     // ...
 }
 ```
@@ -339,16 +360,22 @@ The queue can handle both JSON and protobuf jobs simultaneously:
 ```go
 // Worker handles both formats automatically
 registry := worker.NewRegistry()
-registry.Register("package_ingestion", HandlePackageIngestion)
+registry.Register("send_email", HandleSendEmail)
 
 // Submit protobuf job
-protoTask := &supplychain.PackageIngestionTask{...}
-protoJob, _ := job.NewJobWithProto("package_ingestion", protoTask, job.PriorityHigh)
+protoTask := &tasks.EmailTask{
+    To:      "user@example.com",
+    Subject: "Test",
+}
+protoJob, _ := job.NewJobWithProto("send_email", protoTask, job.PriorityHigh)
 queue.Enqueue(ctx, protoJob)
 
 // Submit JSON job (legacy)
-jsonPayload, _ := json.Marshal(map[string]interface{}{...})
-jsonJob := job.NewJob("package_ingestion", jsonPayload, job.PriorityNormal)
+jsonPayload, _ := json.Marshal(map[string]interface{}{
+    "to":      "user@example.com",
+    "subject": "Test",
+})
+jsonJob := job.NewJob("send_email", jsonPayload, job.PriorityNormal)
 queue.Enqueue(ctx, jsonJob)
 
 // Both jobs are processed correctly!
@@ -374,13 +401,15 @@ job.DefaultSerializer = serializer
 Protobuf supports adding fields without breaking compatibility:
 
 ```protobuf
-message PackageIngestionTask {
-  string package_name = 1;
-  string version = 2;
+message EmailTask {
+  string to = 1;
+  string from = 2;
+  string subject = 3;
   // ... existing fields ...
 
   // NEW: Can add new fields safely
-  string author_email = 12;  // Won't break old code
+  string reply_to = 11;  // Won't break old code
+  int32 retry_count = 12;
 }
 ```
 
@@ -395,10 +424,10 @@ Old code reading new messages ignores unknown fields. New code reading old messa
 Test your protobuf payloads:
 
 ```go
-func TestPackageIngestionTask(t *testing.T) {
-    task := &supplychain.PackageIngestionTask{
-        PackageName:  "test-pkg",
-        Version:      "1.0.0",
+func TestEmailTask(t *testing.T) {
+    task := &tasks.EmailTask{
+        To:      "test@example.com",
+        Subject: "Test Email",
     }
 
     // Create job
@@ -413,12 +442,12 @@ func TestPackageIngestionTask(t *testing.T) {
     }
 
     // Round-trip test
-    result := &supplychain.PackageIngestionTask{}
+    result := &tasks.EmailTask{}
     if err := j.UnmarshalPayloadProto(result); err != nil {
         t.Fatalf("Failed to unmarshal: %v", err)
     }
 
-    if result.PackageName != task.PackageName {
+    if result.To != task.To {
         t.Errorf("Data mismatch")
     }
 }
@@ -443,7 +472,10 @@ data := map[string]string{"key": "value"}
 job.NewJobWithProto("task", data, job.PriorityNormal)  // ERROR
 
 // Right
-task := &supplychain.PackageIngestionTask{...}
+task := &tasks.EmailTask{
+    To:      "user@example.com",
+    Subject: "Test",
+}
 job.NewJobWithProto("task", task, job.PriorityNormal)  // OK
 ```
 
@@ -454,7 +486,7 @@ job.NewJobWithProto("task", task, job.PriorityNormal)  // OK
 **Solution:** Use automatic detection:
 ```go
 // Instead of forcing format:
-task := &supplychain.PackageIngestionTask{}
+task := &tasks.EmailTask{}
 j.UnmarshalPayloadProto(task)  // Auto-detects format
 
 // Or check format first:
@@ -545,16 +577,18 @@ func (pool *Pool) worker(ctx context.Context, workerID int) {
 ```go
 // Bad: Allocates new message each iteration
 for _, item := range items {
-    task := &supplychain.PackageIngestionTask{}
-    task.PackageName = item.Name
+    task := &tasks.EmailTask{}
+    task.To = item.Email
+    task.Subject = item.Subject
     // ...
 }
 
 // Good: Reuse message
-task := &supplychain.PackageIngestionTask{}
+task := &tasks.EmailTask{}
 for _, item := range items {
     task.Reset()  // Clear previous data
-    task.PackageName = item.Name
+    task.To = item.Email
+    task.Subject = item.Subject
     // ...
 }
 ```
@@ -575,10 +609,10 @@ message Task {
 
 ### 3. Batch Small Messages
 
-For many small messages, batch them:
+For many small messages, use the BatchTask message or create custom batching:
 ```protobuf
-message BatchedTasks {
-  repeated PackageIngestionTask tasks = 1;
+message BatchedEmails {
+  repeated EmailTask emails = 1;
 }
 ```
 
@@ -602,7 +636,7 @@ Protobuf support in Bananas provides:
 ✅ **Strong typing** - Fewer runtime errors
 ✅ **Schema evolution** - Add fields without breaking old code
 
-**Recommended for:** Supply chain analysis, large data payloads, high-throughput workloads
+**Recommended for:** Large data payloads, high-throughput workloads, complex nested structures
 
 **Use JSON for:** Simple payloads, debugging, ad-hoc data structures
 
