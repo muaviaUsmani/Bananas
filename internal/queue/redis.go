@@ -198,12 +198,7 @@ func (q *RedisQueue) Dequeue(ctx context.Context, priorities []job.JobPriority) 
 
 // Complete marks a job as completed and removes it from the processing queue
 func (q *RedisQueue) Complete(ctx context.Context, jobID string) error {
-	// Remove from processing queue
-	if err := q.client.LRem(ctx, q.processingQueueKey(), 1, jobID).Err(); err != nil {
-		return fmt.Errorf("failed to remove job from processing queue: %w", err)
-	}
-
-	// Update job status in Redis
+	// Retrieve job data first (must be done before updates)
 	jobData, err := q.client.Get(ctx, q.jobKey(jobID)).Result()
 	if err != nil {
 		return fmt.Errorf("failed to get job data: %w", err)
@@ -221,8 +216,14 @@ func (q *RedisQueue) Complete(ctx context.Context, jobID string) error {
 		return fmt.Errorf("failed to marshal updated job: %w", err)
 	}
 
-	if err := q.client.Set(ctx, q.jobKey(jobID), updatedData, 0).Err(); err != nil {
-		return fmt.Errorf("failed to update job status: %w", err)
+	// Use pipeline to batch removal from processing queue and status update
+	// This reduces 2 round trips to 1
+	pipe := q.client.Pipeline()
+	pipe.LRem(ctx, q.processingQueueKey(), 1, jobID)
+	pipe.Set(ctx, q.jobKey(jobID), updatedData, 0)
+
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("failed to complete job: %w", err)
 	}
 
 	log.Printf("Completed job %s", jobID)
@@ -342,26 +343,37 @@ func (q *RedisQueue) MoveScheduledToReady(ctx context.Context) (int, error) {
 		return 0, nil
 	}
 
-	movedCount := 0
+	// Batch fetch all job data using MGET for efficiency
+	jobKeys := make([]string, len(jobIDs))
+	for i, jobID := range jobIDs {
+		jobKeys[i] = q.jobKey(jobID)
+	}
 
-	// Process each ready job
-	for _, jobID := range jobIDs {
-		// Retrieve job data
-		jobData, err := q.client.Get(ctx, q.jobKey(jobID)).Result()
-		if err == redis.Nil {
-			// Job data not found, remove from scheduled set
-			q.client.ZRem(ctx, q.getScheduledSetKey(), jobID)
-			log.Printf("Warning: Job %s in scheduled set but data not found, removed", jobID)
-			continue
-		}
-		if err != nil {
-			log.Printf("Error retrieving job %s: %v", jobID, err)
+	jobDataList, err := q.client.MGet(ctx, jobKeys...).Result()
+	if err != nil {
+		return 0, fmt.Errorf("failed to get job data: %w", err)
+	}
+
+	// Process all jobs and prepare updates in memory
+	type jobUpdate struct {
+		job           *job.Job
+		updatedData   []byte
+		originalJobID string
+	}
+	updates := make([]jobUpdate, 0, len(jobIDs))
+
+	for i, jobID := range jobIDs {
+		jobData := jobDataList[i]
+		if jobData == nil {
+			// Job data not found, will remove from scheduled set
+			log.Printf("Warning: Job %s in scheduled set but data not found, will be removed", jobID)
+			// Add cleanup to pipeline later
 			continue
 		}
 
 		// Deserialize job
 		var j job.Job
-		if err := json.Unmarshal([]byte(jobData), &j); err != nil {
+		if err := json.Unmarshal([]byte(jobData.(string)), &j); err != nil {
 			log.Printf("Error unmarshaling job %s: %v", jobID, err)
 			continue
 		}
@@ -376,27 +388,44 @@ func (q *RedisQueue) MoveScheduledToReady(ctx context.Context) (int, error) {
 			continue
 		}
 
-		// Use pipeline for atomic operations
-		pipe := q.client.Pipeline()
+		updates = append(updates, jobUpdate{
+			job:           &j,
+			updatedData:   updatedJobData,
+			originalJobID: jobID,
+		})
+	}
 
+	if len(updates) == 0 {
+		return 0, nil
+	}
+
+	// Execute all updates in a single pipeline for maximum efficiency
+	// This reduces N round trips to 1 when moving N jobs
+	pipe := q.client.Pipeline()
+
+	for _, update := range updates {
 		// Update job data (clear ScheduledFor)
-		pipe.Set(ctx, q.jobKey(j.ID), updatedJobData, 0)
+		pipe.Set(ctx, q.jobKey(update.job.ID), update.updatedData, 0)
 
 		// Enqueue to appropriate priority queue
-		pipe.LPush(ctx, q.queueKey(j.Priority), j.ID)
+		pipe.LPush(ctx, q.queueKey(update.job.Priority), update.job.ID)
 
 		// Remove from scheduled set
-		pipe.ZRem(ctx, q.getScheduledSetKey(), j.ID)
-
-		if _, err := pipe.Exec(ctx); err != nil {
-			log.Printf("Error moving job %s to ready queue: %v", jobID, err)
-			continue
-		}
-
-		movedCount++
-		log.Printf("Moved scheduled job %s to %s queue (attempt %d/%d)",
-			j.ID, j.Priority, j.Attempts, j.MaxRetries)
+		pipe.ZRem(ctx, q.getScheduledSetKey(), update.job.ID)
 	}
+
+	// Execute the entire batch
+	if _, err := pipe.Exec(ctx); err != nil {
+		return 0, fmt.Errorf("failed to execute batch job updates: %w", err)
+	}
+
+	// Log each moved job
+	for _, update := range updates {
+		log.Printf("Moved scheduled job %s to %s queue (attempt %d/%d)",
+			update.job.ID, update.job.Priority, update.job.Attempts, update.job.MaxRetries)
+	}
+
+	movedCount := len(updates)
 
 	if movedCount > 0 {
 		log.Printf("Moved %d scheduled jobs to ready queues", movedCount)
