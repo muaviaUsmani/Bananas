@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -49,6 +51,18 @@ func main() {
 	fmt.Println("Scheduler starting...")
 	fmt.Printf("Connecting to Redis: %s\n", cfg.RedisURL)
 	fmt.Printf("Max retries for failed jobs: %d\n", cfg.MaxRetries)
+
+	// Start pprof server on separate port for profiling
+	pprofPort := os.Getenv("PPROF_PORT")
+	if pprofPort == "" {
+		pprofPort = "6062"
+	}
+	go func() {
+		fmt.Printf("pprof server: http://localhost:%s/debug/pprof/\n", pprofPort)
+		if err := http.ListenAndServe(":"+pprofPort, nil); err != nil {
+			log.Printf("pprof server failed: %v", err)
+		}
+	}()
 
 	// Connect to Redis queue with retry logic
 	redisQueue, err := connectWithRetry(cfg.RedisURL, 5)

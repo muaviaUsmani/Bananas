@@ -94,19 +94,24 @@ func (p *Pool) worker(ctx context.Context, workerID int) {
 			log.Printf("Worker %d stopping due to context cancellation", workerID)
 			return
 		default:
-			// Try to dequeue a job
+			// Try to dequeue a job (uses blocking operations internally)
 			j, err := p.queue.Dequeue(ctx, p.priorities)
 			if err != nil {
+				// Check if context was cancelled
+				if ctx.Err() != nil {
+					log.Printf("Worker %d stopping due to context cancellation", workerID)
+					return
+				}
 				log.Printf("Worker %d: error dequeuing job: %v", workerID, err)
 				// Wait a bit before retrying to avoid tight loop on persistent errors
 				time.Sleep(time.Second)
 				continue
 			}
 
-			// No job available
+			// No job available (all queues empty after timeout)
 			if j == nil {
-				// Sleep briefly to avoid tight polling loop
-				time.Sleep(100 * time.Millisecond)
+				// Dequeue uses blocking operations with timeouts, so no sleep needed
+				// Just loop back and try again
 				continue
 			}
 

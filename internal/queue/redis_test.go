@@ -241,7 +241,7 @@ func TestFail_WithRetry(t *testing.T) {
 	}
 
 	// Verify job IS in scheduled set
-	scheduledKey := queue.scheduledSetKey()
+	scheduledKey := queue.getScheduledSetKey()
 	scheduledMembers, _ := queue.client.ZRange(context.Background(), scheduledKey, 0, -1).Result()
 	if len(scheduledMembers) != 1 {
 		t.Errorf("expected job in scheduled set, got %d members", len(scheduledMembers))
@@ -357,7 +357,16 @@ func TestGetJob_NotFound(t *testing.T) {
 }
 
 func TestKeyGeneration(t *testing.T) {
-	queue := &RedisQueue{keyPrefix: "bananas:"}
+	prefix := "bananas:"
+	queue := &RedisQueue{
+		keyPrefix:       prefix,
+		queueHighKey:    prefix + "queue:high",
+		queueNormalKey:  prefix + "queue:normal",
+		queueLowKey:     prefix + "queue:low",
+		processingKey:   prefix + "queue:processing",
+		deadLetterKey:   prefix + "queue:dead",
+		scheduledSetKey: prefix + "queue:scheduled",
+	}
 
 	tests := []struct {
 		name     string
@@ -370,7 +379,7 @@ func TestKeyGeneration(t *testing.T) {
 		{"queueKey low", func() string { return queue.queueKey(job.PriorityLow) }, "bananas:queue:low"},
 		{"processingQueueKey", func() string { return queue.processingQueueKey() }, "bananas:queue:processing"},
 		{"deadLetterQueueKey", func() string { return queue.deadLetterQueueKey() }, "bananas:queue:dead"},
-		{"scheduledSetKey", func() string { return queue.scheduledSetKey() }, "bananas:queue:scheduled"},
+		{"scheduledSetKey", func() string { return queue.getScheduledSetKey() }, "bananas:queue:scheduled"},
 	}
 
 	for _, tt := range tests {
@@ -488,7 +497,7 @@ func TestMoveScheduledToReady_Success(t *testing.T) {
 	queue.Fail(ctx, dequeuedJob, "temporary error")
 
 	// Verify job is in scheduled set
-	scheduledKey := queue.scheduledSetKey()
+	scheduledKey := queue.getScheduledSetKey()
 	scheduledMembers, _ := queue.client.ZRange(context.Background(), scheduledKey, 0, -1).Result()
 	if len(scheduledMembers) != 1 {
 		t.Fatal("expected job in scheduled set")
@@ -574,7 +583,7 @@ func TestMoveScheduledToReady_FutureJobs(t *testing.T) {
 	}
 
 	// Verify job still in scheduled set
-	scheduledKey := queue.scheduledSetKey()
+	scheduledKey := queue.getScheduledSetKey()
 	scheduledMembers, _ := queue.client.ZRange(context.Background(), scheduledKey, 0, -1).Result()
 	if len(scheduledMembers) != 1 {
 		t.Error("expected job still in scheduled set")
@@ -673,7 +682,7 @@ func TestMoveScheduledToReady_MultipleJobs(t *testing.T) {
 
 	// Manually update all scheduled jobs to be in the past
 	// (miniredis FastForward doesn't work with sorted sets)
-	scheduledKey := queue.scheduledSetKey()
+	scheduledKey := queue.getScheduledSetKey()
 	pastTime := time.Now().Add(-10 * time.Second).Unix()
 	queue.client.ZAdd(ctx, scheduledKey, redis.Z{Score: float64(pastTime), Member: job1.ID})
 	queue.client.ZAdd(ctx, scheduledKey, redis.Z{Score: float64(pastTime), Member: job2.ID})
