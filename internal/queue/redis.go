@@ -33,7 +33,30 @@ func NewRedisQueue(redisURL string) (*RedisQueue, error) {
 		return nil, fmt.Errorf("failed to parse Redis URL: %w", err)
 	}
 
-	// Create client
+	// Configure connection pool for job queue workload
+	// These settings are optimized for:
+	// - Multiple concurrent workers (default 10, configurable up to 50+)
+	// - API server handling enqueue requests
+	// - Scheduler moving jobs from scheduled set
+	// - Long-lived connections with blocking operations (BRPOPLPUSH)
+	//
+	// Pool size calculation: workers + API concurrency + scheduler + buffer
+	// Example: 10 workers + 10 API + 1 scheduler + 5 buffer = 26 connections
+	opts.PoolSize = 50 // Maximum connections in pool (handles up to ~40 workers)
+	opts.MinIdleConns = 5 // Keep 5 idle connections ready (reduces connection setup latency)
+	opts.ConnMaxIdleTime = 10 * time.Minute // Close idle connections after 10 minutes
+	opts.PoolTimeout = 5 * time.Second       // Wait up to 5 seconds for connection from pool
+
+	// Retry configuration for transient failures
+	opts.MaxRetries = 3                               // Retry failed commands up to 3 times
+	opts.MinRetryBackoff = 8 * time.Millisecond       // Minimum 8ms between retries
+	opts.MaxRetryBackoff = 512 * time.Millisecond     // Maximum 512ms between retries
+	opts.DialTimeout = 5 * time.Second                // Timeout for establishing connection
+	opts.ReadTimeout = 10 * time.Second               // Longer timeout for blocking operations (BRPOPLPUSH)
+	opts.WriteTimeout = 3 * time.Second               // Timeout for write operations
+	opts.ContextTimeoutEnabled = true                 // Respect context timeouts
+
+	// Create client with optimized options
 	client := redis.NewClient(opts)
 
 	// Test connection
@@ -42,7 +65,8 @@ func NewRedisQueue(redisURL string) (*RedisQueue, error) {
 		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 
-	log.Printf("Connected to Redis at %s", redisURL)
+	log.Printf("Connected to Redis at %s (pool: %d max, %d min idle)",
+		redisURL, opts.PoolSize, opts.MinIdleConns)
 
 	prefix := "bananas:"
 	return &RedisQueue{
