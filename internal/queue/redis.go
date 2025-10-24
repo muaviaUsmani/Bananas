@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/muaviaUsmani/bananas/internal/job"
@@ -15,6 +16,13 @@ import (
 type RedisQueue struct {
 	client    *redis.Client
 	keyPrefix string
+	// Pre-computed keys for better performance (avoid string allocations)
+	queueHighKey    string
+	queueNormalKey  string
+	queueLowKey     string
+	processingKey   string
+	deadLetterKey   string
+	scheduledSetKey string
 }
 
 // NewRedisQueue creates a new Redis queue and tests the connection
@@ -36,31 +44,55 @@ func NewRedisQueue(redisURL string) (*RedisQueue, error) {
 
 	log.Printf("Connected to Redis at %s", redisURL)
 
+	prefix := "bananas:"
 	return &RedisQueue{
-		client:    client,
-		keyPrefix: "bananas:",
+		client:          client,
+		keyPrefix:       prefix,
+		// Pre-compute all static keys once to avoid repeated string allocations
+		queueHighKey:    prefix + "queue:high",
+		queueNormalKey:  prefix + "queue:normal",
+		queueLowKey:     prefix + "queue:low",
+		processingKey:   prefix + "queue:processing",
+		deadLetterKey:   prefix + "queue:dead",
+		scheduledSetKey: prefix + "queue:scheduled",
 	}, nil
 }
 
 // Key generation helpers
 func (q *RedisQueue) jobKey(jobID string) string {
-	return fmt.Sprintf("%sjob:%s", q.keyPrefix, jobID)
+	// Use strings.Builder for efficient string concatenation
+	var b strings.Builder
+	b.Grow(len(q.keyPrefix) + 4 + len(jobID)) // "job:" = 4 chars
+	b.WriteString(q.keyPrefix)
+	b.WriteString("job:")
+	b.WriteString(jobID)
+	return b.String()
 }
 
 func (q *RedisQueue) queueKey(priority job.JobPriority) string {
-	return fmt.Sprintf("%squeue:%s", q.keyPrefix, priority)
+	// Return pre-computed queue keys based on priority
+	switch priority {
+	case job.PriorityHigh:
+		return q.queueHighKey
+	case job.PriorityNormal:
+		return q.queueNormalKey
+	case job.PriorityLow:
+		return q.queueLowKey
+	default:
+		return q.queueNormalKey
+	}
 }
 
 func (q *RedisQueue) processingQueueKey() string {
-	return fmt.Sprintf("%squeue:processing", q.keyPrefix)
+	return q.processingKey
 }
 
 func (q *RedisQueue) deadLetterQueueKey() string {
-	return fmt.Sprintf("%squeue:dead", q.keyPrefix)
+	return q.deadLetterKey
 }
 
-func (q *RedisQueue) scheduledSetKey() string {
-	return fmt.Sprintf("%squeue:scheduled", q.keyPrefix)
+func (q *RedisQueue) getScheduledSetKey() string {
+	return q.scheduledSetKey
 }
 
 // Enqueue adds a job to the appropriate priority queue
@@ -210,7 +242,7 @@ func (q *RedisQueue) Fail(ctx context.Context, j *job.Job, errMsg string) error 
 		pipe.Set(ctx, q.jobKey(j.ID), jobData, 0)
 
 		// Add to scheduled set with retry time as score
-		pipe.ZAdd(ctx, q.scheduledSetKey(), redis.Z{
+		pipe.ZAdd(ctx, q.getScheduledSetKey(), redis.Z{
 			Score:  float64(nextRetryTime.Unix()),
 			Member: j.ID,
 		})
@@ -264,7 +296,7 @@ func (q *RedisQueue) MoveScheduledToReady(ctx context.Context) (int, error) {
 	now := time.Now().Unix()
 
 	// Find all jobs ready to run (score <= current timestamp)
-	jobIDs, err := q.client.ZRangeByScore(ctx, q.scheduledSetKey(), &redis.ZRangeBy{
+	jobIDs, err := q.client.ZRangeByScore(ctx, q.getScheduledSetKey(), &redis.ZRangeBy{
 		Min: "-inf",
 		Max: fmt.Sprintf("%d", now),
 	}).Result()
@@ -285,7 +317,7 @@ func (q *RedisQueue) MoveScheduledToReady(ctx context.Context) (int, error) {
 		jobData, err := q.client.Get(ctx, q.jobKey(jobID)).Result()
 		if err == redis.Nil {
 			// Job data not found, remove from scheduled set
-			q.client.ZRem(ctx, q.scheduledSetKey(), jobID)
+			q.client.ZRem(ctx, q.getScheduledSetKey(), jobID)
 			log.Printf("Warning: Job %s in scheduled set but data not found, removed", jobID)
 			continue
 		}
@@ -321,7 +353,7 @@ func (q *RedisQueue) MoveScheduledToReady(ctx context.Context) (int, error) {
 		pipe.LPush(ctx, q.queueKey(j.Priority), j.ID)
 
 		// Remove from scheduled set
-		pipe.ZRem(ctx, q.scheduledSetKey(), j.ID)
+		pipe.ZRem(ctx, q.getScheduledSetKey(), j.ID)
 
 		if _, err := pipe.Exec(ctx); err != nil {
 			log.Printf("Error moving job %s to ready queue: %v", jobID, err)
