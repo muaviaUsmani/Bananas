@@ -23,6 +23,9 @@ type RedisQueue struct {
 	processingKey   string
 	deadLetterKey   string
 	scheduledSetKey string
+	// TTL configuration for job data retention
+	completedJobTTL time.Duration // TTL for completed jobs (default: 24 hours)
+	failedJobTTL    time.Duration // TTL for failed jobs in dead letter queue (default: 7 days)
 }
 
 // NewRedisQueue creates a new Redis queue and tests the connection
@@ -79,6 +82,10 @@ func NewRedisQueue(redisURL string) (*RedisQueue, error) {
 		processingKey:   prefix + "queue:processing",
 		deadLetterKey:   prefix + "queue:dead",
 		scheduledSetKey: prefix + "queue:scheduled",
+		// Set default TTL values for job data retention
+		// These prevent Redis from growing unbounded with old job data
+		completedJobTTL: 24 * time.Hour, // Keep completed jobs for 24 hours
+		failedJobTTL:    7 * 24 * time.Hour, // Keep failed jobs for 7 days
 	}, nil
 }
 
@@ -242,15 +249,16 @@ func (q *RedisQueue) Complete(ctx context.Context, jobID string) error {
 
 	// Use pipeline to batch removal from processing queue and status update
 	// This reduces 2 round trips to 1
+	// Set TTL on completed job data to prevent unbounded Redis growth
 	pipe := q.client.Pipeline()
 	pipe.LRem(ctx, q.processingQueueKey(), 1, jobID)
-	pipe.Set(ctx, q.jobKey(jobID), updatedData, 0)
+	pipe.Set(ctx, q.jobKey(jobID), updatedData, q.completedJobTTL)
 
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("failed to complete job: %w", err)
 	}
 
-	log.Printf("Completed job %s", jobID)
+	log.Printf("Completed job %s (TTL: %v)", jobID, q.completedJobTTL)
 	return nil
 }
 
@@ -326,8 +334,8 @@ func (q *RedisQueue) Fail(ctx context.Context, j *job.Job, errMsg string) error 
 		return fmt.Errorf("failed to marshal job: %w", err)
 	}
 
-	// Update job data
-	pipe.Set(ctx, q.jobKey(j.ID), jobData, 0)
+	// Update job data with TTL to prevent unbounded growth of failed jobs
+	pipe.Set(ctx, q.jobKey(j.ID), jobData, q.failedJobTTL)
 
 	// Move to dead letter queue
 	pipe.LPush(ctx, q.deadLetterQueueKey(), j.ID)
@@ -339,7 +347,7 @@ func (q *RedisQueue) Fail(ctx context.Context, j *job.Job, errMsg string) error 
 		return fmt.Errorf("failed to move job to dead letter queue: %w", err)
 	}
 
-	log.Printf("Job %s moved to dead letter queue after %d attempts", j.ID, j.Attempts)
+	log.Printf("Job %s moved to dead letter queue after %d attempts (TTL: %v)", j.ID, j.Attempts, q.failedJobTTL)
 	return nil
 }
 
