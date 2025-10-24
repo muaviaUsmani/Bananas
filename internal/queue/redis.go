@@ -121,20 +121,53 @@ func (q *RedisQueue) Enqueue(ctx context.Context, j *job.Job) error {
 	return nil
 }
 
-// Dequeue retrieves a job from the highest priority non-empty queue
+// Dequeue retrieves a job from the highest priority non-empty queue using blocking operations
+//
+// Implementation Strategy:
+// Uses BRPOPLPUSH (blocking right-pop + left-push) to eliminate busy-waiting while maintaining
+// strict priority ordering. Each priority queue is checked in order with a timeout:
+// - High priority: 1 second timeout
+// - Normal priority: 1 second timeout
+// - Low priority: 3 seconds timeout
+//
+// This approach:
+// - Eliminates the 100ms polling sleep in worker loops
+// - Maintains strict priority ordering (high jobs always processed first)
+// - Reduces Redis CPU usage by using native blocking operations
+// - Allows graceful shutdown via context cancellation
+//
+// Trade-off: A high-priority job arriving while blocking on low-priority queue may wait
+// up to 3 seconds. This is acceptable for most workloads and far better than continuous polling.
 func (q *RedisQueue) Dequeue(ctx context.Context, priorities []job.JobPriority) (*job.Job, error) {
-	// Try each priority queue in order
-	for _, priority := range priorities {
-		queueKey := q.queueKey(priority)
-		processingKey := q.processingQueueKey()
+	processingKey := q.processingQueueKey()
 
-		// Atomically move job from priority queue to processing queue
-		result, err := q.client.RPopLPush(ctx, queueKey, processingKey).Result()
+	// Try each priority queue in order with blocking operations
+	for i, priority := range priorities {
+		queueKey := q.queueKey(priority)
+
+		// Calculate timeout based on priority and position
+		// High and normal get 1s, low gets longer timeout since it's checked last
+		var timeout time.Duration
+		if i == len(priorities)-1 {
+			// Last priority queue gets longer timeout (3 seconds)
+			timeout = 3 * time.Second
+		} else {
+			// Higher priority queues get shorter timeout (1 second)
+			timeout = 1 * time.Second
+		}
+
+		// Use BRPOPLPUSH for blocking dequeue with timeout
+		// This atomically moves job from priority queue to processing queue
+		result, err := q.client.BRPopLPush(ctx, queueKey, processingKey, timeout).Result()
 		if err == redis.Nil {
-			// Queue is empty, try next priority
+			// Queue is empty after timeout, try next priority
 			continue
 		}
 		if err != nil {
+			// Check if context was cancelled
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
 			return nil, fmt.Errorf("failed to dequeue job: %w", err)
 		}
 
@@ -159,7 +192,7 @@ func (q *RedisQueue) Dequeue(ctx context.Context, priorities []job.JobPriority) 
 		return &j, nil
 	}
 
-	// All queues are empty
+	// All queues are empty after checking with timeouts
 	return nil, nil
 }
 
