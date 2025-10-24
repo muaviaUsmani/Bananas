@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
@@ -24,6 +26,18 @@ func main() {
 	fmt.Printf("Worker concurrency: %d\n", cfg.WorkerConcurrency)
 	fmt.Printf("Job timeout: %s\n", cfg.JobTimeout)
 	fmt.Printf("Connecting to Redis: %s\n", cfg.RedisURL)
+
+	// Start pprof server on separate port for profiling
+	pprofPort := os.Getenv("PPROF_PORT")
+	if pprofPort == "" {
+		pprofPort = "6061"
+	}
+	go func() {
+		fmt.Printf("pprof server: http://localhost:%s/debug/pprof/\n", pprofPort)
+		if err := http.ListenAndServe(":"+pprofPort, nil); err != nil {
+			log.Printf("pprof server failed: %v", err)
+		}
+	}()
 
 	// Connect to Redis queue
 	redisQueue, err := queue.NewRedisQueue(cfg.RedisURL)
