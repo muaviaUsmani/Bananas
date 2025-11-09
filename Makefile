@@ -1,4 +1,4 @@
-.PHONY: help dev prod up down build logs clean restart ps scale-workers test test-verbose test-coverage test-local test-local-verbose test-local-coverage
+.PHONY: help dev prod up down build logs clean restart ps scale-workers test test-verbose test-coverage test-local test-local-verbose test-local-coverage es-start es-stop es-init es-clean es-logs es-status
 
 # Default target - show help
 help:
@@ -37,6 +37,14 @@ help:
 	@echo "  make restart          - Restart all services (dev mode)"
 	@echo "  make clean            - Stop and remove all containers, networks, volumes"
 	@echo "  make scale-workers N=5 - Scale workers to N instances (default: 5)"
+	@echo ""
+	@echo "Elasticsearch Commands (Logging):"
+	@echo "  make es-start         - Start Elasticsearch and Kibana"
+	@echo "  make es-stop          - Stop Elasticsearch and Kibana"
+	@echo "  make es-init          - Initialize Elasticsearch (index templates, ILM)"
+	@echo "  make es-clean         - Clean Elasticsearch data and stop"
+	@echo "  make es-logs          - View Elasticsearch logs"
+	@echo "  make es-status        - Check Elasticsearch health status"
 	@echo ""
 
 # Development mode (hot reload)
@@ -126,4 +134,42 @@ up: dev
 down: dev-down
 build: dev-build
 logs: dev-logs
+
+# Elasticsearch commands
+es-start:
+	@echo "Starting Elasticsearch and Kibana..."
+	docker compose -f docker-compose.elasticsearch.yml up -d
+	@echo "Waiting for services to be healthy..."
+	@sleep 5
+	@echo ""
+	@echo "✅ Elasticsearch: http://localhost:9200"
+	@echo "✅ Kibana: http://localhost:5601"
+	@echo ""
+	@echo "Run 'make es-init' to initialize index templates and ILM policies"
+
+es-stop:
+	@echo "Stopping Elasticsearch and Kibana..."
+	docker compose -f docker-compose.elasticsearch.yml down
+	@echo "✅ Stopped"
+
+es-init:
+	@echo "Initializing Elasticsearch..."
+	@bash scripts/init-elasticsearch.sh
+	@echo ""
+	@echo "✅ Elasticsearch is ready for logging!"
+
+es-clean:
+	@echo "Cleaning Elasticsearch data and stopping services..."
+	docker compose -f docker-compose.elasticsearch.yml down -v
+	@echo "✅ Cleaned"
+
+es-logs:
+	docker compose -f docker-compose.elasticsearch.yml logs -f elasticsearch
+
+es-status:
+	@echo "Elasticsearch Cluster Health:"
+	@curl -s http://localhost:9200/_cluster/health?pretty || echo "❌ Elasticsearch is not running (run 'make es-start')"
+	@echo ""
+	@echo "Indices:"
+	@curl -s http://localhost:9200/_cat/indices/bananas-logs-*?v || echo "No indices found yet"
 
