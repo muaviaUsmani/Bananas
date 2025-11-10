@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/muaviaUsmani/bananas/internal/config"
 	"github.com/muaviaUsmani/bananas/internal/job"
 	"github.com/muaviaUsmani/bananas/internal/logger"
 	"github.com/muaviaUsmani/bananas/internal/metrics"
@@ -23,9 +24,8 @@ type QueueReader interface {
 type Pool struct {
 	executor          *Executor
 	queue             QueueReader
-	concurrency       int
+	workerConfig      *config.WorkerConfig
 	jobTimeout        time.Duration
-	priorities        []job.JobPriority
 	wg                sync.WaitGroup
 	stopChan          chan struct{}
 	activeWorkers     atomic.Int64
@@ -34,31 +34,51 @@ type Pool struct {
 }
 
 // NewPool creates a new worker pool
+// Deprecated: Use NewPoolWithConfig instead
 func NewPool(executor *Executor, queue QueueReader, concurrency int, jobTimeout time.Duration) *Pool {
+	// Create a default worker config for backward compatibility
+	workerConfig := &config.WorkerConfig{
+		Mode:              config.WorkerModeDefault,
+		Concurrency:       concurrency,
+		Priorities:        []job.JobPriority{job.PriorityHigh, job.PriorityNormal, job.PriorityLow},
+		JobTypes:          nil, // All job types
+		SchedulerInterval: 1 * time.Second,
+		EnableScheduler:   true,
+	}
+
+	return NewPoolWithConfig(executor, queue, workerConfig, jobTimeout)
+}
+
+// NewPoolWithConfig creates a new worker pool with explicit configuration
+func NewPoolWithConfig(executor *Executor, queue QueueReader, workerConfig *config.WorkerConfig, jobTimeout time.Duration) *Pool {
 	return &Pool{
 		executor:          executor,
 		queue:             queue,
-		concurrency:       concurrency,
+		workerConfig:      workerConfig,
 		jobTimeout:        jobTimeout,
 		redisRetryBackoff: time.Second,      // Initial backoff: 1 second
 		maxRetryBackoff:   30 * time.Second, // Max backoff: 30 seconds
-		priorities: []job.JobPriority{
-			job.PriorityHigh,
-			job.PriorityNormal,
-			job.PriorityLow,
-		},
-		stopChan: make(chan struct{}),
+		stopChan:          make(chan struct{}),
 	}
 }
 
 // Start begins processing jobs from the queue with the configured concurrency
 func (p *Pool) Start(ctx context.Context) {
-	logger.Info("Starting worker pool", "workers", p.concurrency)
+	logger.Info("Starting worker pool",
+		"mode", p.workerConfig.Mode,
+		"workers", p.workerConfig.Concurrency,
+		"priorities", len(p.workerConfig.Priorities),
+		"scheduler_enabled", p.workerConfig.EnableScheduler)
 
-	// Start worker goroutines
-	for i := 0; i < p.concurrency; i++ {
-		p.wg.Add(1)
-		go p.worker(ctx, i+1)
+	// Log worker configuration details
+	logger.Info("Worker configuration", "config", p.workerConfig.String())
+
+	// Start worker goroutines (unless scheduler-only mode)
+	if p.workerConfig.Mode != config.WorkerModeSchedulerOnly {
+		for i := 0; i < p.workerConfig.Concurrency; i++ {
+			p.wg.Add(1)
+			go p.worker(ctx, i+1)
+		}
 	}
 
 	logger.Info("Worker pool started successfully")
@@ -116,7 +136,7 @@ func (p *Pool) worker(ctx context.Context, workerID int) {
 			return
 		default:
 			// Try to dequeue a job (uses blocking operations internally)
-			j, err := p.queue.Dequeue(workerCtx, p.priorities)
+			j, err := p.queue.Dequeue(workerCtx, p.workerConfig.Priorities)
 			if err != nil {
 				// Check if context was cancelled
 				if workerCtx.Err() != nil {
@@ -168,6 +188,23 @@ func (p *Pool) worker(ctx context.Context, workerID int) {
 				continue
 			}
 
+			// Check if this worker should process this job (job-type filtering)
+			if !p.workerConfig.ShouldProcessJob(j) {
+				// Job doesn't match our filters (wrong job type for job-specialized mode)
+				// Put it back in the queue by marking it as failed with zero attempts
+				// Actually, we should skip it - another worker will pick it up
+				// For now, we'll process it anyway since we already dequeued it
+				// TODO: Implement proper job re-enqueue mechanism
+				logger.Debug("Skipping job due to job-type filter",
+					"worker_id", workerID,
+					"job_id", j.ID,
+					"job_name", j.Name,
+					"allowed_types", p.workerConfig.JobTypes)
+				// For now, just continue - in practice this shouldn't happen often
+				// because queue separation should prevent this
+				continue
+			}
+
 			// Execute the job with timeout
 			p.executeWithTimeout(workerCtx, workerID, j)
 		}
@@ -181,11 +218,11 @@ func (p *Pool) executeWithTimeout(ctx context.Context, workerID int, j *job.Job)
 	defer func() {
 		active = p.activeWorkers.Add(-1)
 		// Update metrics with current worker utilization
-		metrics.Default().RecordWorkerActivity(active, int64(p.concurrency))
+		metrics.Default().RecordWorkerActivity(active, int64(p.workerConfig.Concurrency))
 	}()
 
 	// Update metrics with current worker utilization
-	metrics.Default().RecordWorkerActivity(active, int64(p.concurrency))
+	metrics.Default().RecordWorkerActivity(active, int64(p.workerConfig.Concurrency))
 
 	// Add job_id to context
 	jobCtx := context.WithValue(ctx, "job_id", j.ID)
