@@ -7,22 +7,26 @@ import (
 
 	"github.com/muaviaUsmani/bananas/internal/job"
 	"github.com/muaviaUsmani/bananas/internal/logger"
-	"github.com/muaviaUsmani/bananas/internal/queue"
 	"github.com/redis/go-redis/v9"
 )
+
+// Queue defines the interface for enqueueing jobs
+type Queue interface {
+	Enqueue(ctx context.Context, j *job.Job) error
+}
 
 // CronScheduler manages periodic task execution
 type CronScheduler struct {
 	registry *Registry
-	queue    queue.Queue
+	queue    Queue
 	client   *redis.Client
 	interval time.Duration
 	lockTTL  time.Duration
-	log      *logger.Logger
+	log      logger.Logger
 }
 
 // NewCronScheduler creates a new cron scheduler
-func NewCronScheduler(registry *Registry, queue queue.Queue, client *redis.Client, interval time.Duration) *CronScheduler {
+func NewCronScheduler(registry *Registry, queue Queue, client *redis.Client, interval time.Duration) *CronScheduler {
 	return &CronScheduler{
 		registry: registry,
 		queue:    queue,
@@ -129,16 +133,16 @@ func (cs *CronScheduler) executeSchedule(ctx context.Context, schedule *Schedule
 	}()
 
 	// Create and enqueue job
+	description := schedule.Description
+	if description == "" {
+		description = fmt.Sprintf("Scheduled job: %s (schedule: %s)", schedule.Job, schedule.ID)
+	}
+
 	j := &job.Job{
-		Name:     schedule.Job,
-		Payload:  schedule.Payload,
-		Priority: schedule.Priority,
-		Metadata: map[string]string{
-			"schedule_id":  schedule.ID,
-			"scheduled_at": now.Format(time.RFC3339),
-			"trigger_type": "cron",
-			"description":  schedule.Description,
-		},
+		Name:        schedule.Job,
+		Payload:     schedule.Payload,
+		Priority:    schedule.Priority,
+		Description: description,
 	}
 
 	// Default to normal priority if not specified
@@ -237,6 +241,12 @@ func (cs *CronScheduler) getState(ctx context.Context, scheduleID string) (*Sche
 
 	if lastError, exists := result["last_error"]; exists {
 		state.LastError = lastError
+	}
+
+	if runCount, exists := result["run_count"]; exists && runCount != "" {
+		var count int64
+		fmt.Sscanf(runCount, "%d", &count)
+		state.RunCount = count
 	}
 
 	return state, nil
