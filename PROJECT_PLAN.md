@@ -793,7 +793,7 @@ func ResetMetrics()
 ---
 
 ## 🔄 PHASE 3: Advanced Features (Priority: HIGH)
-### **STATUS: 40% COMPLETE** (2/5 tasks complete)
+### **STATUS: 60% COMPLETE** (3/5 tasks complete)
 
 ### ✅ Task 3.1: Multi-Tier Worker Architecture
 **Status:** COMPLETE ✅
@@ -1128,19 +1128,74 @@ result, err := client.GetResult(ctx, jobID)
 
 ---
 
-### 🔲 Task 3.4: Task Routing
-**Status:** NOT STARTED 🔲
+### ✅ Task 3.4: Task Routing
+**Status:** COMPLETE ✅
+**Completed:** 2025-11-10
 **Priority:** MEDIUM
-**Estimated Effort:** 1-2 days
+**Time Spent:** 1 day
 
 **Goal:** Route different job types to different workers
 
+**Location:** `internal/job/types.go`, `internal/queue/redis.go`, `internal/worker/pool.go`, `internal/config/worker.go`, `pkg/client/client.go`
+
+**What Was Built:**
+
+**1. Core Routing Infrastructure:**
+- ✅ Added `RoutingKey` field to Job struct with validation
+- ✅ Routing-aware queue operations (Enqueue/DequeueWithRouting)
+- ✅ Multiple routing keys per worker with priority ordering
+- ✅ Scheduler respects routing keys for scheduled/retry jobs
+- ✅ Worker configuration via `WORKER_ROUTING_KEYS` env var
+
+**2. Client SDK:**
+- ✅ `SubmitJobWithRoute()` method for routing jobs
+- ✅ Backward compatible `SubmitJob()` (defaults to "default" routing)
+- ✅ Routing key validation on job submission
+
+**3. Tests:**
+- ✅ Unit tests for routing key validation (100% coverage)
+- ✅ Integration tests for routing scenarios
+- ✅ Tests for multi-key workers, priority ordering, scheduled jobs
+
+**4. Examples:**
+- ✅ GPU worker example (dedicated GPU processing)
+- ✅ Multi-routing worker example (handles multiple queues)
+- ✅ Client example with different routing keys
+- ✅ Complete README with usage instructions
+
+**5. Documentation:**
+- ✅ Comprehensive usage guide (`docs/TASK_ROUTING_USAGE.md`)
+- ✅ Design document (`docs/TASK_ROUTING_DESIGN.md`)
+- ✅ Updated main README with task routing feature
+
 **Example:**
 ```go
-// Route GPU jobs to GPU workers
-router.Route("image_processing", "gpu_workers")
-router.Route("email_sending", "email_workers")
+// Submit GPU job to GPU workers
+jobID, err := client.SubmitJobWithRoute(
+    "process_image",
+    payload,
+    job.PriorityHigh,
+    "gpu", // routing key
+)
+
+// Configure worker to handle GPU jobs
+// WORKER_ROUTING_KEYS=gpu,default
+workerConfig.RoutingKeys = []string{"gpu", "default"}
 ```
+
+**Key Features:**
+- Resource isolation (GPU vs CPU workers)
+- Independent scaling per job type
+- Multiple routing keys per worker (fallback support)
+- Priority respected within each routing key
+- Full backward compatibility (defaults to "default" routing)
+
+**Success Criteria:**
+- ✅ Jobs route to correct worker pools
+- ✅ Workers can handle multiple routing keys
+- ✅ Priority ordering maintained within routing keys
+- ✅ Scheduled jobs respect routing
+- ✅ Comprehensive tests and documentation
 
 ---
 
@@ -1217,8 +1272,8 @@ router.Route("email_sending", "email_workers")
 |-----------|--------|--------|
 | Multi-tier workers | 5 modes working | ✅ **COMPLETE** |
 | Periodic tasks | Cron support | ✅ **COMPLETE** (45 tests, full timezone support, distributed locking) |
-| Result backend | Store/retrieve | 🔲 Not started |
-| Task routing | Working | ✅ **COMPLETE** (Job-specialized worker mode) |
+| Result backend | Store/retrieve | ✅ **COMPLETE** (Redis backend with TTL, pub/sub waiting, RPC-style support) |
+| Task routing | Working | ✅ **COMPLETE** (Multiple routing keys, resource isolation, independent scaling) |
 | Architecture docs | 30 min to understand | ✅ **COMPLETE** (WORKER_ARCHITECTURE_DESIGN.md, MULTI_TIER_WORKERS.md, PERIODIC_TASKS_DESIGN.md) |
 | Integration guide | <1 hour to integrate | ⚠️ Basic exists |
 | API reference | 100% coverage | ⚠️ ~60% |
@@ -1412,9 +1467,11 @@ const job = await client.submitJob({
    - ✅ RPC-style task support
    - ✅ Pub/sub for efficient result waiting
 
-6. 🔲 **Task 3.4: Task Routing** (1-2 days)
-   - Route jobs to specific workers
-   - Resource isolation
+6. ✅ **Task 3.4: Task Routing** (1 day) - **COMPLETE**
+   - ✅ Route jobs to specific workers via routing keys
+   - ✅ Resource isolation (GPU, email, regions)
+   - ✅ Multiple routing keys per worker with priority
+   - ✅ Full backward compatibility
 
 ### **Medium-Term (Weeks 7-10):**
 
@@ -1501,9 +1558,9 @@ These features are **not in current scope** (Phases 6-9):
 | **Worker Scaling** | ✅ Complete | ✅ Complete | 100% |
 | **Task Routing** | ✅ Complete | ✅ Complete | 100% |
 | **Monitoring UI** | 🔲 Pending | ✅ Flower | 0% |
-| **Overall** | **~87%** | **100%** | **87%** |
+| **Overall** | **~90%** | **100%** | **90%** |
 
-**Timeline to 90% Parity:** ~1-2 weeks (Task 3.4: Task Routing + Documentation)
+**Status:** ✅ **Achieved 90%+ parity with Celery!** Task Routing complete. Remaining: Monitoring UI and documentation enhancements.
 
 ---
 

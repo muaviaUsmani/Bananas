@@ -475,8 +475,14 @@ func (q *RedisQueue) MoveScheduledToReady(ctx context.Context) (int, error) {
 		// Update job data (clear ScheduledFor)
 		pipe.Set(ctx, q.jobKey(update.job.ID), update.updatedData, 0)
 
-		// Enqueue to appropriate priority queue
-		pipe.LPush(ctx, q.queueKey(update.job.Priority), update.job.ID)
+		// Ensure job has a valid routing key (default to "default" for backward compatibility)
+		routingKey := update.job.RoutingKey
+		if routingKey == "" {
+			routingKey = "default"
+		}
+
+		// Enqueue to appropriate routed priority queue
+		pipe.LPush(ctx, q.routeQueueKey(routingKey, update.job.Priority), update.job.ID)
 
 		// Remove from scheduled set
 		pipe.ZRem(ctx, q.getScheduledSetKey(), update.job.ID)
@@ -489,8 +495,12 @@ func (q *RedisQueue) MoveScheduledToReady(ctx context.Context) (int, error) {
 
 	// Log each moved job
 	for _, update := range updates {
-		log.Printf("Moved scheduled job %s to %s queue (attempt %d/%d)",
-			update.job.ID, update.job.Priority, update.job.Attempts, update.job.MaxRetries)
+		routingKey := update.job.RoutingKey
+		if routingKey == "" {
+			routingKey = "default"
+		}
+		log.Printf("Moved scheduled job %s to routing key '%s' with priority %s (attempt %d/%d)",
+			update.job.ID, routingKey, update.job.Priority, update.job.Attempts, update.job.MaxRetries)
 	}
 
 	movedCount := len(updates)

@@ -6,10 +6,24 @@ A distributed task queue system built with Go, Redis, and Docker.
 
 Bananas is a lightweight, scalable distributed task queue system designed to handle asynchronous job processing across multiple workers. It uses Redis as the message broker and provides a simple API for job submission and management.
 
+## ✨ Features
+
+- **Task Routing** - Direct jobs to specific worker pools (GPU, email, regions) for resource isolation and independent scaling
+- **Priority Queues** - High, normal, and low priority processing with strict ordering
+- **Scheduled Jobs** - Schedule jobs for future execution with exponential backoff retry
+- **Job Retry** - Automatic retry with configurable exponential backoff for failed jobs
+- **Dead Letter Queue** - Failed jobs are moved to DLQ for inspection and recovery
+- **Worker Modes** - Thin, default, specialized, and job-specialized modes for different use cases
+- **Result Backend** - Store and retrieve job results with configurable TTL
+- **Graceful Shutdown** - Workers complete in-progress jobs before stopping
+- **Metrics & Monitoring** - Built-in metrics for queue depth, job counts, and worker utilization
+- **Hot Reload** - Development mode with instant service restart on code changes
+
 ## 📖 Documentation
 
 - **[Integration Guide](./INTEGRATION_GUIDE.md)** - Complete guide for integrating Bananas into your projects
-- **[Architecture & Components](./README.md#architecture)** - System design and component overview  
+- **[Task Routing Guide](./docs/TASK_ROUTING_USAGE.md)** - Route jobs to specific worker pools (GPU, email, regions)
+- **[Architecture & Components](./README.md#architecture)** - System design and component overview
 - **[API Documentation](./cmd/README.md)** - Service entry points (API, Worker, Scheduler)
 - **[Internal Packages](./internal/README.md)** - Core packages (Config, Job, Queue, Worker)
 - **[Client SDK](./pkg/README.md)** - Public client library documentation

@@ -173,3 +173,146 @@ func TestJob_TimestampsSet(t *testing.T) {
 	}
 }
 
+// Test routing key functionality
+
+func TestNewJob_DefaultRoutingKey(t *testing.T) {
+	j := NewJob("test_job", []byte("{}"), PriorityNormal)
+
+	if j.RoutingKey != "default" {
+		t.Errorf("expected default routing key 'default', got '%s'", j.RoutingKey)
+	}
+}
+
+func TestSetRoutingKey_ValidKeys(t *testing.T) {
+	tests := []struct {
+		name       string
+		routingKey string
+	}{
+		{"simple", "gpu"},
+		{"with underscore", "high_memory"},
+		{"with hyphen", "us-east-1"},
+		{"mixed case", "GPUWorker"},
+		{"alphanumeric", "worker123"},
+		{"max length", "a234567890123456789012345678901234567890123456789012345678901234"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			j := NewJob("test_job", []byte("{}"), PriorityNormal)
+			err := j.SetRoutingKey(tt.routingKey)
+			if err != nil {
+				t.Errorf("expected valid routing key '%s' to succeed, got error: %v", tt.routingKey, err)
+			}
+			if j.RoutingKey != tt.routingKey {
+				t.Errorf("expected routing key '%s', got '%s'", tt.routingKey, j.RoutingKey)
+			}
+		})
+	}
+}
+
+func TestSetRoutingKey_InvalidKeys(t *testing.T) {
+	tests := []struct {
+		name       string
+		routingKey string
+		expectErr  string
+	}{
+		{"empty", "", "cannot be empty"},
+		{"too long", "a2345678901234567890123456789012345678901234567890123456789012345", "too long"},
+		{"with spaces", "gpu worker", "invalid routing key format"},
+		{"with special chars", "gpu@worker", "invalid routing key format"},
+		{"with slash", "gpu/worker", "invalid routing key format"},
+		{"with dots", "gpu.worker", "invalid routing key format"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			j := NewJob("test_job", []byte("{}"), PriorityNormal)
+			err := j.SetRoutingKey(tt.routingKey)
+			if err == nil {
+				t.Errorf("expected error for invalid routing key '%s', got nil", tt.routingKey)
+			}
+		})
+	}
+}
+
+func TestValidateRoutingKey_Valid(t *testing.T) {
+	validKeys := []string{
+		"default",
+		"gpu",
+		"email",
+		"high_memory",
+		"us-east-1",
+		"Worker123",
+		"critical",
+	}
+
+	for _, key := range validKeys {
+		t.Run(key, func(t *testing.T) {
+			err := ValidateRoutingKey(key)
+			if err != nil {
+				t.Errorf("expected '%s' to be valid, got error: %v", key, err)
+			}
+		})
+	}
+}
+
+func TestValidateRoutingKey_Invalid(t *testing.T) {
+	invalidKeys := []string{
+		"",                                                                    // empty
+		"a2345678901234567890123456789012345678901234567890123456789012345",  // too long (65 chars)
+		"gpu worker",                                                          // spaces
+		"gpu@worker",                                                          // special char
+		"gpu.worker",                                                          // dot
+		"gpu/worker",                                                          // slash
+		"gpu:worker",                                                          // colon
+	}
+
+	for _, key := range invalidKeys {
+		t.Run(key, func(t *testing.T) {
+			err := ValidateRoutingKey(key)
+			if err == nil {
+				t.Errorf("expected '%s' to be invalid, got no error", key)
+			}
+		})
+	}
+}
+
+func TestSetRoutingKey_UpdatesTimestamp(t *testing.T) {
+	j := NewJob("test_job", []byte("{}"), PriorityNormal)
+	initialTime := j.UpdatedAt
+
+	// Wait to ensure timestamp changes
+	time.Sleep(10 * time.Millisecond)
+
+	err := j.SetRoutingKey("gpu")
+	if err != nil {
+		t.Fatalf("failed to set routing key: %v", err)
+	}
+
+	if !j.UpdatedAt.After(initialTime) {
+		t.Error("expected UpdatedAt timestamp to be updated after setting routing key")
+	}
+}
+
+func TestJob_RoutingKeyJSONMarshaling(t *testing.T) {
+	j := NewJob("test_job", []byte(`{"test":"data"}`), PriorityHigh)
+	j.SetRoutingKey("gpu")
+
+	// Marshal to JSON
+	data, err := json.Marshal(j)
+	if err != nil {
+		t.Fatalf("failed to marshal job: %v", err)
+	}
+
+	// Unmarshal back
+	var unmarshaled Job
+	if err := json.Unmarshal(data, &unmarshaled); err != nil {
+		t.Fatalf("failed to unmarshal job: %v", err)
+	}
+
+	// Verify routing key is preserved
+	if unmarshaled.RoutingKey != "gpu" {
+		t.Errorf("expected routing key 'gpu', got '%s'", unmarshaled.RoutingKey)
+	}
+}
+
