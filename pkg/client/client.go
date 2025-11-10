@@ -74,7 +74,32 @@ func NewClientWithConfig(redisURL string, successTTL, failureTTL time.Duration) 
 // The payload will be marshaled to JSON automatically.
 // Description is optional - if provided, the first value will be used.
 // Returns the job ID on success.
+// Uses the default routing key ("default").
 func (c *Client) SubmitJob(name string, payload interface{}, priority job.JobPriority, description ...string) (string, error) {
+	// Marshal payload to JSON
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	// Create new job (will use default routing key)
+	j := job.NewJob(name, payloadBytes, priority, description...)
+
+	// Enqueue to Redis
+	if err := c.queue.Enqueue(c.ctx, j); err != nil {
+		return "", fmt.Errorf("failed to enqueue job: %w", err)
+	}
+
+	return j.ID, nil
+}
+
+// SubmitJobWithRoute creates and submits a new job with a specific routing key.
+// The routing key determines which worker pool will process this job.
+// Common routing keys: "default", "gpu", "email", etc.
+// The payload will be marshaled to JSON automatically.
+// Description is optional - if provided, the first value will be used.
+// Returns the job ID on success.
+func (c *Client) SubmitJobWithRoute(name string, payload interface{}, priority job.JobPriority, routingKey string, description ...string) (string, error) {
 	// Marshal payload to JSON
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
@@ -83,6 +108,11 @@ func (c *Client) SubmitJob(name string, payload interface{}, priority job.JobPri
 
 	// Create new job
 	j := job.NewJob(name, payloadBytes, priority, description...)
+
+	// Set routing key
+	if err := j.SetRoutingKey(routingKey); err != nil {
+		return "", fmt.Errorf("invalid routing key: %w", err)
+	}
 
 	// Enqueue to Redis
 	if err := c.queue.Enqueue(c.ctx, j); err != nil {
