@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -12,11 +11,12 @@ import (
 	"time"
 
 	"github.com/muaviaUsmani/bananas/internal/config"
+	"github.com/muaviaUsmani/bananas/internal/logger"
 	"github.com/muaviaUsmani/bananas/internal/queue"
 )
 
 // connectWithRetry attempts to connect to Redis with exponential backoff
-func connectWithRetry(redisURL string, maxRetries int) (*queue.RedisQueue, error) {
+func connectWithRetry(redisURL string, maxRetries int, log logger.Logger) (*queue.RedisQueue, error) {
 	var redisQueue *queue.RedisQueue
 	var err error
 
@@ -32,8 +32,11 @@ func connectWithRetry(redisURL string, maxRetries int) (*queue.RedisQueue, error
 			delay = 30 * time.Second
 		}
 
-		log.Printf("Failed to connect to Redis (attempt %d/%d): %v. Retrying in %v...",
-			attempt+1, maxRetries, err, delay)
+		log.Warn("Failed to connect to Redis, retrying",
+			"attempt", attempt+1,
+			"max_attempts", maxRetries,
+			"error", err,
+			"retry_in", delay)
 
 		time.Sleep(delay)
 	}
@@ -45,12 +48,27 @@ func main() {
 	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		os.Exit(1)
 	}
 
-	fmt.Println("Scheduler starting...")
-	fmt.Printf("Connecting to Redis: %s\n", cfg.RedisURL)
-	fmt.Printf("Max retries for failed jobs: %d\n", cfg.MaxRetries)
+	// Initialize logger
+	log, err := logger.NewLogger(cfg.Logging)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer log.Close()
+
+	// Set as default logger
+	logger.SetDefault(log)
+
+	// Create component-specific logger
+	schedulerLog := log.WithComponent(logger.ComponentScheduler).WithSource(logger.LogSourceInternal)
+
+	schedulerLog.Info("Scheduler starting",
+		"redis_url", cfg.RedisURL,
+		"max_retries", cfg.MaxRetries)
 
 	// Start pprof server on separate port for profiling
 	pprofPort := os.Getenv("PPROF_PORT")
@@ -58,20 +76,21 @@ func main() {
 		pprofPort = "6062"
 	}
 	go func() {
-		fmt.Printf("pprof server: http://localhost:%s/debug/pprof/\n", pprofPort)
+		schedulerLog.Info("Starting pprof server", "port", pprofPort, "url", fmt.Sprintf("http://localhost:%s/debug/pprof/", pprofPort))
 		if err := http.ListenAndServe(":"+pprofPort, nil); err != nil {
-			log.Printf("pprof server failed: %v", err)
+			schedulerLog.Error("pprof server failed", "error", err)
 		}
 	}()
 
 	// Connect to Redis queue with retry logic
-	redisQueue, err := connectWithRetry(cfg.RedisURL, 5)
+	redisQueue, err := connectWithRetry(cfg.RedisURL, 5, schedulerLog)
 	if err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
+		schedulerLog.Error("Failed to connect to Redis", "error", err)
+		os.Exit(1)
 	}
 	defer redisQueue.Close()
 
-	log.Println("Successfully connected to Redis")
+	schedulerLog.Info("Successfully connected to Redis")
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -87,7 +106,7 @@ func main() {
 		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 
-		log.Println("Scheduler ready - monitoring scheduled jobs...")
+		schedulerLog.Info("Scheduler ready - monitoring scheduled jobs")
 
 		for {
 			select {
@@ -95,15 +114,15 @@ func main() {
 				// Move scheduled jobs that are ready to their priority queues
 				count, err := redisQueue.MoveScheduledToReady(ctx)
 				if err != nil {
-					log.Printf("Error moving scheduled jobs: %v", err)
+					schedulerLog.Error("Error moving scheduled jobs", "error", err)
 				}
 				// Only log if jobs were actually moved (reduces log noise)
 				if count > 0 {
-					log.Printf("Moved %d scheduled jobs to ready queues", count)
+					schedulerLog.Info("Moved scheduled jobs to ready queues", "count", count)
 				}
 
 			case <-ctx.Done():
-				log.Println("Scheduler stopping...")
+				schedulerLog.Info("Scheduler stopping")
 				return
 			}
 		}
@@ -111,7 +130,7 @@ func main() {
 
 	// Wait for shutdown signal
 	sig := <-sigChan
-	log.Printf("Received signal %v, initiating graceful shutdown...", sig)
+	schedulerLog.Info("Received shutdown signal, initiating graceful shutdown", "signal", sig)
 
 	// Cancel context to stop background goroutine
 	cancel()
@@ -119,6 +138,5 @@ func main() {
 	// Give background tasks time to finish
 	time.Sleep(2 * time.Second)
 
-	log.Println("Scheduler shut down successfully")
+	schedulerLog.Info("Scheduler shut down successfully")
 }
-

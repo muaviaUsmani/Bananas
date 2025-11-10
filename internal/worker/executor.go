@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/muaviaUsmani/bananas/internal/job"
+	"github.com/muaviaUsmani/bananas/internal/metrics"
 )
 
 // Queue interface defines the methods needed for job queue operations
@@ -48,6 +49,9 @@ func (e *Executor) ExecuteJob(ctx context.Context, j *job.Job) error {
 	j.UpdateStatus(job.StatusProcessing)
 	log.Printf("Executing job %s (name: %s, priority: %s)", j.ID, j.Name, j.Priority)
 
+	// Record job started in metrics
+	metrics.Default().RecordJobStarted(j.Priority)
+
 	// Execute handler with context
 	startTime := time.Now()
 	err := handler(ctx, j)
@@ -59,7 +63,10 @@ func (e *Executor) ExecuteJob(ctx context.Context, j *job.Job) error {
 		if ctx.Err() != nil {
 			log.Printf("Job %s cancelled: %v", j.ID, ctx.Err())
 			errMsg := fmt.Sprintf("context cancelled: %v", ctx.Err())
-			
+
+			// Record job failure in metrics
+			metrics.Default().RecordJobFailed(j.Priority, duration)
+
 			// Mark as failed in queue (will trigger exponential backoff retry)
 			if queueErr := e.queue.Fail(ctx, j, errMsg); queueErr != nil {
 				log.Printf("Failed to update job %s in queue after cancellation: %v", j.ID, queueErr)
@@ -69,7 +76,10 @@ func (e *Executor) ExecuteJob(ctx context.Context, j *job.Job) error {
 
 		// Handler returned an error
 		log.Printf("Job %s failed after %v: %v", j.ID, duration, err)
-		
+
+		// Record job failure in metrics
+		metrics.Default().RecordJobFailed(j.Priority, duration)
+
 		// Mark as failed in queue (will trigger exponential backoff retry)
 		if queueErr := e.queue.Fail(ctx, j, err.Error()); queueErr != nil {
 			log.Printf("Failed to update job %s in queue after failure: %v", j.ID, queueErr)
@@ -79,6 +89,10 @@ func (e *Executor) ExecuteJob(ctx context.Context, j *job.Job) error {
 
 	// Success - mark as completed in queue
 	log.Printf("Job %s completed successfully in %v", j.ID, duration)
+
+	// Record job completion in metrics
+	metrics.Default().RecordJobCompleted(j.Priority, duration)
+
 	if err := e.queue.Complete(ctx, j.ID); err != nil {
 		log.Printf("Failed to mark job %s as completed in queue: %v", j.ID, err)
 		return fmt.Errorf("job succeeded but failed to update queue: %w", err)

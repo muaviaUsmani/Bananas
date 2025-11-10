@@ -1,0 +1,62 @@
+version: '3.8'
+
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: bananas-elasticsearch
+    environment:
+      # Single-node cluster for development
+      - discovery.type=single-node
+
+      # Disable security for local development
+      - xpack.security.enabled=false
+      - xpack.security.http.ssl.enabled=false
+
+      # Memory settings
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
+
+      # Cluster name
+      - cluster.name=bananas-logs-cluster
+      - node.name=bananas-node-1
+    ports:
+      - "9200:9200"  # HTTP API
+      - "9300:9300"  # Transport
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - bananas-logging
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: bananas-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - ELASTICSEARCH_SSL_VERIFICATIONMODE=none
+      - SERVER_NAME=bananas-kibana
+    ports:
+      - "5601:5601"  # Kibana UI
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - bananas-logging
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:5601/api/status || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  elasticsearch-data:
+    driver: local
+
+networks:
+  bananas-logging:
+    driver: bridge

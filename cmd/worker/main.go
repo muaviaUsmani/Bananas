@@ -3,14 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/muaviaUsmani/bananas/internal/config"
+	"github.com/muaviaUsmani/bananas/internal/logger"
+	"github.com/muaviaUsmani/bananas/internal/metrics"
 	"github.com/muaviaUsmani/bananas/internal/queue"
 	"github.com/muaviaUsmani/bananas/internal/worker"
 )
@@ -19,13 +21,28 @@ func main() {
 	// Load configuration
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		log.Fatalf("Failed to load config: %v", err)
+		fmt.Fprintf(os.Stderr, "Failed to load config: %v\n", err)
+		os.Exit(1)
 	}
 
-	fmt.Println("Worker starting...")
-	fmt.Printf("Worker concurrency: %d\n", cfg.WorkerConcurrency)
-	fmt.Printf("Job timeout: %s\n", cfg.JobTimeout)
-	fmt.Printf("Connecting to Redis: %s\n", cfg.RedisURL)
+	// Initialize logger
+	log, err := logger.NewLogger(cfg.Logging)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
+		os.Exit(1)
+	}
+	defer log.Close()
+
+	// Set as default logger
+	logger.SetDefault(log)
+
+	// Create component-specific logger
+	workerLog := log.WithComponent(logger.ComponentWorker).WithSource(logger.LogSourceInternal)
+
+	workerLog.Info("Worker starting",
+		"concurrency", cfg.WorkerConcurrency,
+		"job_timeout", cfg.JobTimeout,
+		"redis_url", cfg.RedisURL)
 
 	// Start pprof server on separate port for profiling
 	pprofPort := os.Getenv("PPROF_PORT")
@@ -33,16 +50,17 @@ func main() {
 		pprofPort = "6061"
 	}
 	go func() {
-		fmt.Printf("pprof server: http://localhost:%s/debug/pprof/\n", pprofPort)
+		workerLog.Info("Starting pprof server", "port", pprofPort, "url", fmt.Sprintf("http://localhost:%s/debug/pprof/", pprofPort))
 		if err := http.ListenAndServe(":"+pprofPort, nil); err != nil {
-			log.Printf("pprof server failed: %v", err)
+			workerLog.Error("pprof server failed", "error", err)
 		}
 	}()
 
 	// Connect to Redis queue
 	redisQueue, err := queue.NewRedisQueue(cfg.RedisURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to Redis: %v", err)
+		workerLog.Error("Failed to connect to Redis", "error", err)
+		os.Exit(1)
 	}
 	defer redisQueue.Close()
 
@@ -55,7 +73,7 @@ func main() {
 	registry.Register("send_email", worker.HandleSendEmail)
 	registry.Register("process_data", worker.HandleProcessData)
 
-	fmt.Printf("Registered %d job handlers\n", registry.Count())
+	workerLog.Info("Registered job handlers", "count", registry.Count())
 
 	// Create executor with queue integration
 	executor := worker.NewExecutor(registry, redisQueue, cfg.WorkerConcurrency)
@@ -74,9 +92,33 @@ func main() {
 	// Start worker pool
 	pool.Start(ctx)
 
+	// Start periodic metrics logging
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				m := metrics.GetMetrics()
+				workerLog.Info("System metrics",
+					"jobs_processed", m.TotalJobsProcessed,
+					"jobs_completed", m.TotalJobsCompleted,
+					"jobs_failed", m.TotalJobsFailed,
+					"avg_duration_ms", m.AvgJobDuration.Milliseconds(),
+					"worker_utilization", fmt.Sprintf("%.1f%%", m.WorkerUtilization),
+					"error_rate", fmt.Sprintf("%.2f%%", m.ErrorRate),
+					"uptime", m.Uptime.String(),
+				)
+			}
+		}
+	}()
+
 	// Wait for shutdown signal
 	sig := <-sigChan
-	log.Printf("Received signal %v, initiating graceful shutdown...", sig)
+	workerLog.Info("Received shutdown signal, initiating graceful shutdown", "signal", sig)
 
 	// Cancel context to stop workers
 	cancel()
@@ -84,6 +126,6 @@ func main() {
 	// Stop the pool (waits for all workers to finish)
 	pool.Stop()
 
-	log.Println("Worker shut down successfully")
+	workerLog.Info("Worker shut down successfully")
 }
 

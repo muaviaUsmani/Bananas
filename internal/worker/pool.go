@@ -2,11 +2,14 @@ package worker
 
 import (
 	"context"
-	"log"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/muaviaUsmani/bananas/internal/job"
+	"github.com/muaviaUsmani/bananas/internal/logger"
+	"github.com/muaviaUsmani/bananas/internal/metrics"
 )
 
 // QueueReader defines the interface for dequeuing jobs from the queue
@@ -16,13 +19,14 @@ type QueueReader interface {
 
 // Pool manages a pool of workers that process jobs from the queue
 type Pool struct {
-	executor    *Executor
-	queue       QueueReader
-	concurrency int
-	jobTimeout  time.Duration
-	priorities  []job.JobPriority
-	wg          sync.WaitGroup
-	stopChan    chan struct{}
+	executor      *Executor
+	queue         QueueReader
+	concurrency   int
+	jobTimeout    time.Duration
+	priorities    []job.JobPriority
+	wg            sync.WaitGroup
+	stopChan      chan struct{}
+	activeWorkers atomic.Int64
 }
 
 // NewPool creates a new worker pool
@@ -43,7 +47,7 @@ func NewPool(executor *Executor, queue QueueReader, concurrency int, jobTimeout 
 
 // Start begins processing jobs from the queue with the configured concurrency
 func (p *Pool) Start(ctx context.Context) {
-	log.Printf("Starting worker pool with %d workers", p.concurrency)
+	logger.Info("Starting worker pool", "workers", p.concurrency)
 
 	// Start worker goroutines
 	for i := 0; i < p.concurrency; i++ {
@@ -51,12 +55,12 @@ func (p *Pool) Start(ctx context.Context) {
 		go p.worker(ctx, i+1)
 	}
 
-	log.Printf("Worker pool started successfully")
+	logger.Info("Worker pool started successfully")
 }
 
 // Stop gracefully shuts down the worker pool with a 30-second timeout
 func (p *Pool) Stop() {
-	log.Println("Stopping worker pool...")
+	logger.Info("Stopping worker pool")
 	close(p.stopChan)
 
 	// Wait for workers with timeout
@@ -68,9 +72,9 @@ func (p *Pool) Stop() {
 
 	select {
 	case <-done:
-		log.Println("Worker pool stopped gracefully")
+		logger.Info("Worker pool stopped gracefully")
 	case <-time.After(30 * time.Second):
-		log.Println("Warning: Worker pool shutdown timed out after 30 seconds")
+		logger.Warn("Worker pool shutdown timed out", "timeout", "30s")
 	}
 }
 
@@ -79,30 +83,33 @@ func (p *Pool) worker(ctx context.Context, workerID int) {
 	defer p.wg.Done()
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("Worker %d recovered from panic: %v", workerID, r)
+			logger.Error("Worker recovered from panic", "worker_id", workerID, "panic", r)
 		}
 	}()
 
-	log.Printf("Worker %d started", workerID)
+	// Create worker-specific context with worker_id
+	workerCtx := context.WithValue(ctx, "worker_id", fmt.Sprintf("worker-%d", workerID))
+
+	logger.Info("Worker started", "worker_id", workerID)
 
 	for {
 		select {
 		case <-p.stopChan:
-			log.Printf("Worker %d stopping...", workerID)
+			logger.Info("Worker stopping", "worker_id", workerID)
 			return
-		case <-ctx.Done():
-			log.Printf("Worker %d stopping due to context cancellation", workerID)
+		case <-workerCtx.Done():
+			logger.Info("Worker stopping due to context cancellation", "worker_id", workerID)
 			return
 		default:
 			// Try to dequeue a job (uses blocking operations internally)
-			j, err := p.queue.Dequeue(ctx, p.priorities)
+			j, err := p.queue.Dequeue(workerCtx, p.priorities)
 			if err != nil {
 				// Check if context was cancelled
-				if ctx.Err() != nil {
-					log.Printf("Worker %d stopping due to context cancellation", workerID)
+				if workerCtx.Err() != nil {
+					logger.Info("Worker stopping due to context cancellation", "worker_id", workerID)
 					return
 				}
-				log.Printf("Worker %d: error dequeuing job: %v", workerID, err)
+				logger.Error("Error dequeuing job", "worker_id", workerID, "error", err)
 				// Wait a bit before retrying to avoid tight loop on persistent errors
 				time.Sleep(time.Second)
 				continue
@@ -116,31 +123,47 @@ func (p *Pool) worker(ctx context.Context, workerID int) {
 			}
 
 			// Execute the job with timeout
-			p.executeWithTimeout(ctx, workerID, j)
+			p.executeWithTimeout(workerCtx, workerID, j)
 		}
 	}
 }
 
 // executeWithTimeout executes a job with the configured timeout
 func (p *Pool) executeWithTimeout(ctx context.Context, workerID int, j *job.Job) {
+	// Mark worker as active
+	active := p.activeWorkers.Add(1)
+	defer func() {
+		active = p.activeWorkers.Add(-1)
+		// Update metrics with current worker utilization
+		metrics.Default().RecordWorkerActivity(active, int64(p.concurrency))
+	}()
+
+	// Update metrics with current worker utilization
+	metrics.Default().RecordWorkerActivity(active, int64(p.concurrency))
+
 	// Recover from panics during job execution
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("Worker %d: job %s panicked: %v", workerID, j.ID, r)
+			logger.Error("Job panicked", "worker_id", workerID, "job_id", j.ID, "panic", r)
 		}
 	}()
 
+	// Add job_id to context
+	jobCtx := context.WithValue(ctx, "job_id", j.ID)
+
 	// Create context with timeout for job execution
-	jobCtx, cancel := context.WithTimeout(ctx, p.jobTimeout)
+	jobCtx, cancel := context.WithTimeout(jobCtx, p.jobTimeout)
 	defer cancel()
 
-	log.Printf("Worker %d: processing job %s (name: %s)", workerID, j.ID, j.Name)
+	// Use job-specific logger
+	jobLogger := logger.Default().WithSource(logger.LogSourceJob)
+	jobLogger.InfoContext(jobCtx, "Processing job", "worker_id", workerID, "job_id", j.ID, "job_name", j.Name, "priority", j.Priority)
 
 	// Execute the job
 	if err := p.executor.ExecuteJob(jobCtx, j); err != nil {
-		log.Printf("Worker %d: job %s failed: %v", workerID, j.ID, err)
+		jobLogger.ErrorContext(jobCtx, "Job failed", "worker_id", workerID, "job_id", j.ID, "error", err)
 	} else {
-		log.Printf("Worker %d: job %s completed", workerID, j.ID)
+		jobLogger.InfoContext(jobCtx, "Job completed", "worker_id", workerID, "job_id", j.ID)
 	}
 }
 
