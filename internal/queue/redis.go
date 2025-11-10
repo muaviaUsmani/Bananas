@@ -212,16 +212,47 @@ func (q *RedisQueue) Dequeue(ctx context.Context, priorities []job.JobPriority) 
 		// Retrieve job data
 		jobData, err := q.client.Get(ctx, q.jobKey(jobID)).Result()
 		if err != nil {
-			// Job data not found, remove from processing queue
-			q.client.LRem(ctx, processingKey, 1, jobID)
-			return nil, fmt.Errorf("job data not found for ID %s: %w", jobID, err)
+			// Job data not found (corrupted reference) - move to dead letter queue
+			log.Printf("ERROR: Job data not found for ID %s (corrupted reference) - moving to dead letter queue", jobID)
+
+			pipe := q.client.Pipeline()
+			pipe.LPush(ctx, q.deadLetterQueueKey(), jobID)
+			pipe.LRem(ctx, processingKey, 1, jobID)
+			// Store error info as job data with TTL
+			errorJob := map[string]interface{}{
+				"id":    jobID,
+				"error": "Job data not found (corrupted reference)",
+			}
+			errorData, _ := json.Marshal(errorJob)
+			pipe.Set(ctx, q.jobKey(jobID), errorData, q.failedJobTTL)
+			pipe.Exec(ctx)
+
+			// Skip this corrupted job and continue processing other jobs
+			continue
 		}
 
 		// Deserialize job
 		var j job.Job
 		if err := json.Unmarshal([]byte(jobData), &j); err != nil {
-			q.client.LRem(ctx, processingKey, 1, jobID)
-			return nil, fmt.Errorf("failed to unmarshal job: %w", err)
+			// Invalid/corrupted job data - move to dead letter queue WITHOUT RETRY
+			log.Printf("ERROR: Failed to unmarshal job %s (corrupted data) - moving to dead letter queue", jobID)
+			log.Printf("Corrupted job data (first 200 chars): %s", truncate(jobData, 200))
+
+			pipe := q.client.Pipeline()
+			pipe.LPush(ctx, q.deadLetterQueueKey(), jobID)
+			pipe.LRem(ctx, processingKey, 1, jobID)
+			// Update job data to mark as corrupted with TTL
+			errorJob := map[string]interface{}{
+				"id":            jobID,
+				"error":         fmt.Sprintf("Failed to unmarshal job: %v", err),
+				"corrupted_data": truncate(jobData, 500), // Store truncated data for debugging
+			}
+			errorData, _ := json.Marshal(errorJob)
+			pipe.Set(ctx, q.jobKey(jobID), errorData, q.failedJobTTL)
+			pipe.Exec(ctx)
+
+			// Skip this corrupted job and continue processing other jobs
+			continue
 		}
 
 		log.Printf("Dequeued job %s from %s queue", j.ID, priority)
@@ -513,5 +544,19 @@ func (q *RedisQueue) Close() error {
 	}
 	log.Println("Closed Redis connection")
 	return nil
+}
+
+// truncate truncates a string to maxLen characters
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+	return s[:maxLen] + "..."
+}
+
+// DeadLetterQueueLength returns the number of jobs in the dead letter queue
+// This is primarily useful for testing and monitoring
+func (q *RedisQueue) DeadLetterQueueLength(ctx context.Context) (int64, error) {
+	return q.client.LLen(ctx, q.deadLetterQueueKey()).Result()
 }
 

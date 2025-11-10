@@ -31,6 +31,13 @@ func (m *mockQueueReader) Dequeue(ctx context.Context, priorities []job.JobPrior
 	return j, nil
 }
 
+func (m *mockQueueReader) Fail(ctx context.Context, j *job.Job, errMsg string) error {
+	// Mock implementation - just update job error for testing
+	j.Error = errMsg
+	j.Attempts++
+	return nil
+}
+
 func TestNewPool(t *testing.T) {
 	registry := NewRegistry()
 	mockQ := &mockQueue{}
