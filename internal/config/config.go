@@ -26,6 +26,12 @@ type Config struct {
 	CronSchedulerEnabled bool
 	// CronSchedulerInterval is the interval at which the cron scheduler checks for due schedules
 	CronSchedulerInterval time.Duration
+	// ResultBackendEnabled enables storing job results
+	ResultBackendEnabled bool
+	// ResultBackendTTLSuccess is the TTL for successful job results
+	ResultBackendTTLSuccess time.Duration
+	// ResultBackendTTLFailure is the TTL for failed job results
+	ResultBackendTTLFailure time.Duration
 	// Logging configuration
 	Logging *logger.Config
 }
@@ -33,14 +39,17 @@ type Config struct {
 // LoadConfig loads configuration from environment variables with sensible defaults
 func LoadConfig() (*Config, error) {
 	cfg := &Config{
-		RedisURL:              getEnv("REDIS_URL", "redis://localhost:6379"),
-		APIPort:               getEnv("API_PORT", "8080"),
-		WorkerConcurrency:     getEnvAsInt("WORKER_CONCURRENCY", 5),
-		JobTimeout:            getEnvAsDuration("JOB_TIMEOUT", 5*time.Minute),
-		MaxRetries:            getEnvAsInt("MAX_RETRIES", 3),
-		CronSchedulerEnabled:  getEnvAsBool("CRON_SCHEDULER_ENABLED", true),
-		CronSchedulerInterval: getEnvAsDuration("CRON_SCHEDULER_INTERVAL", 1*time.Second),
-		Logging:               loadLoggingConfig(),
+		RedisURL:                getEnv("REDIS_URL", "redis://localhost:6379"),
+		APIPort:                 getEnv("API_PORT", "8080"),
+		WorkerConcurrency:       getEnvAsInt("WORKER_CONCURRENCY", 5),
+		JobTimeout:              getEnvAsDuration("JOB_TIMEOUT", 5*time.Minute),
+		MaxRetries:              getEnvAsInt("MAX_RETRIES", 3),
+		CronSchedulerEnabled:    getEnvAsBool("CRON_SCHEDULER_ENABLED", true),
+		CronSchedulerInterval:   getEnvAsDuration("CRON_SCHEDULER_INTERVAL", 1*time.Second),
+		ResultBackendEnabled:    getEnvAsBool("RESULT_BACKEND_ENABLED", true),
+		ResultBackendTTLSuccess: getEnvAsDuration("RESULT_BACKEND_TTL_SUCCESS", 1*time.Hour),
+		ResultBackendTTLFailure: getEnvAsDuration("RESULT_BACKEND_TTL_FAILURE", 24*time.Hour),
+		Logging:                 loadLoggingConfig(),
 	}
 
 	// Validate required fields

@@ -8,15 +8,19 @@ import (
 
 	"github.com/muaviaUsmani/bananas/internal/job"
 	"github.com/muaviaUsmani/bananas/internal/queue"
+	"github.com/muaviaUsmani/bananas/internal/result"
+	"github.com/redis/go-redis/v9"
 )
 
 // Client provides a simple API for submitting and managing jobs
 type Client struct {
-	queue *queue.RedisQueue
-	ctx   context.Context
+	queue         *queue.RedisQueue
+	resultBackend result.Backend
+	ctx           context.Context
 }
 
 // NewClient creates a new job client connected to Redis
+// The result backend is enabled by default with standard TTLs (1h success, 24h failure)
 func NewClient(redisURL string) (*Client, error) {
 	// Connect to Redis queue
 	q, err := queue.NewRedisQueue(redisURL)
@@ -24,9 +28,45 @@ func NewClient(redisURL string) (*Client, error) {
 		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 
+	// Create Redis client for result backend
+	opts, err := redis.ParseURL(redisURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse Redis URL: %w", err)
+	}
+	redisClient := redis.NewClient(opts)
+
+	// Create result backend with default TTLs
+	resultBackend := result.NewRedisBackend(redisClient, 1*time.Hour, 24*time.Hour)
+
 	return &Client{
-		queue: q,
-		ctx:   context.Background(),
+		queue:         q,
+		resultBackend: resultBackend,
+		ctx:           context.Background(),
+	}, nil
+}
+
+// NewClientWithConfig creates a new job client with custom result backend TTLs
+func NewClientWithConfig(redisURL string, successTTL, failureTTL time.Duration) (*Client, error) {
+	// Connect to Redis queue
+	q, err := queue.NewRedisQueue(redisURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
+	}
+
+	// Create Redis client for result backend
+	opts, err := redis.ParseURL(redisURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse Redis URL: %w", err)
+	}
+	redisClient := redis.NewClient(opts)
+
+	// Create result backend with custom TTLs
+	resultBackend := result.NewRedisBackend(redisClient, successTTL, failureTTL)
+
+	return &Client{
+		queue:         q,
+		resultBackend: resultBackend,
+		ctx:           context.Background(),
 	}, nil
 }
 
@@ -104,11 +144,59 @@ func (c *Client) GetJob(jobID string) (*job.Job, error) {
 	return j, nil
 }
 
-// Close closes the Redis connection
-func (c *Client) Close() error {
-	if c.queue != nil {
-		return c.queue.Close()
+// GetResult retrieves the result of a completed job by its ID
+// Returns nil if the job hasn't completed yet or if the result has expired
+// Returns an error if retrieval fails
+func (c *Client) GetResult(ctx context.Context, jobID string) (*job.JobResult, error) {
+	result, err := c.resultBackend.GetResult(ctx, jobID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get result: %w", err)
 	}
-	return nil
+
+	return result, nil
+}
+
+// SubmitAndWait submits a job and waits for its result
+// This is a convenience method for RPC-style task execution
+// Blocks until the job completes or the timeout is reached
+// Returns the result if the job completes within the timeout
+// Returns an error if the job fails, times out, or if submission fails
+func (c *Client) SubmitAndWait(ctx context.Context, name string, payload interface{}, priority job.JobPriority, timeout time.Duration) (*job.JobResult, error) {
+	// Submit the job
+	jobID, err := c.SubmitJob(name, payload, priority)
+	if err != nil {
+		return nil, fmt.Errorf("failed to submit job: %w", err)
+	}
+
+	// Wait for the result
+	result, err := c.resultBackend.WaitForResult(ctx, jobID, timeout)
+	if err != nil {
+		return nil, fmt.Errorf("failed to wait for result: %w", err)
+	}
+
+	if result == nil {
+		return nil, fmt.Errorf("job did not complete within timeout of %v", timeout)
+	}
+
+	return result, nil
+}
+
+// Close closes the Redis connections
+func (c *Client) Close() error {
+	var queueErr, resultErr error
+
+	if c.queue != nil {
+		queueErr = c.queue.Close()
+	}
+
+	if c.resultBackend != nil {
+		resultErr = c.resultBackend.Close()
+	}
+
+	// Return first error encountered
+	if queueErr != nil {
+		return queueErr
+	}
+	return resultErr
 }
 
