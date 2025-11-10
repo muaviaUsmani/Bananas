@@ -103,16 +103,35 @@ func (q *RedisQueue) jobKey(jobID string) string {
 
 func (q *RedisQueue) queueKey(priority job.JobPriority) string {
 	// Return pre-computed queue keys based on priority
+	// For backward compatibility, this uses the default routing key
+	return q.routeQueueKey("default", priority)
+}
+
+// routeQueueKey generates a queue key for a specific routing key and priority
+// Format: bananas:route:{routing_key}:queue:{priority}
+func (q *RedisQueue) routeQueueKey(routingKey string, priority job.JobPriority) string {
+	var priorityStr string
 	switch priority {
 	case job.PriorityHigh:
-		return q.queueHighKey
+		priorityStr = "high"
 	case job.PriorityNormal:
-		return q.queueNormalKey
+		priorityStr = "normal"
 	case job.PriorityLow:
-		return q.queueLowKey
+		priorityStr = "low"
 	default:
-		return q.queueNormalKey
+		priorityStr = "normal"
 	}
+
+	// Use strings.Builder for efficient string concatenation
+	var b strings.Builder
+	// "route:" (6) + routingKey + ":queue:" (7) + priorityStr (~6)
+	b.Grow(len(q.keyPrefix) + 6 + len(routingKey) + 7 + len(priorityStr))
+	b.WriteString(q.keyPrefix)
+	b.WriteString("route:")
+	b.WriteString(routingKey)
+	b.WriteString(":queue:")
+	b.WriteString(priorityStr)
+	return b.String()
 }
 
 func (q *RedisQueue) processingQueueKey() string {
@@ -127,8 +146,18 @@ func (q *RedisQueue) getScheduledSetKey() string {
 	return q.scheduledSetKey
 }
 
-// Enqueue adds a job to the appropriate priority queue
+// Enqueue adds a job to the appropriate priority queue with routing support
 func (q *RedisQueue) Enqueue(ctx context.Context, j *job.Job) error {
+	// Default routing key if not specified (backward compatibility)
+	if j.RoutingKey == "" {
+		j.RoutingKey = "default"
+	}
+
+	// Validate routing key
+	if err := job.ValidateRoutingKey(j.RoutingKey); err != nil {
+		return fmt.Errorf("invalid routing key: %w", err)
+	}
+
 	// Serialize job to JSON
 	jobData, err := json.Marshal(j)
 	if err != nil {
@@ -141,15 +170,16 @@ func (q *RedisQueue) Enqueue(ctx context.Context, j *job.Job) error {
 	// Store job data in hash
 	pipe.Set(ctx, q.jobKey(j.ID), jobData, 0)
 
-	// Push job ID to priority queue
-	pipe.LPush(ctx, q.queueKey(j.Priority), j.ID)
+	// Push job ID to routed priority queue
+	queueKey := q.routeQueueKey(j.RoutingKey, j.Priority)
+	pipe.LPush(ctx, queueKey, j.ID)
 
 	// Execute pipeline
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("failed to enqueue job: %w", err)
 	}
 
-	log.Printf("Enqueued job %s to %s queue", j.ID, j.Priority)
+	log.Printf("Enqueued job %s to routing key '%s' with priority %s", j.ID, j.RoutingKey, j.Priority)
 
 	// Update queue depth metrics (best-effort, don't fail enqueue on error)
 	q.updateQueueMetrics(ctx)
@@ -256,6 +286,124 @@ func (q *RedisQueue) Dequeue(ctx context.Context, priorities []job.JobPriority) 
 		}
 
 		log.Printf("Dequeued job %s from %s queue", j.ID, priority)
+		return &j, nil
+	}
+
+	// All queues are empty after checking with timeouts
+	return nil, nil
+}
+
+// DequeueWithRouting retrieves a job from the specified routing keys with priority ordering
+//
+// This method allows workers to handle multiple routing keys (e.g., ["gpu", "default"]).
+// Jobs are dequeued in the following order:
+// 1. For each routing key (in order):
+//    a. High priority queue
+//    b. Normal priority queue
+//    c. Low priority queue
+//
+// Example: routingKeys=["gpu", "default"] checks queues in this order:
+// gpu:high, gpu:normal, gpu:low, default:high, default:normal, default:low
+//
+// This ensures:
+// - GPU jobs are preferred over default jobs
+// - Within each routing key, priority is respected
+// - Fair processing across routing keys
+func (q *RedisQueue) DequeueWithRouting(ctx context.Context, routingKeys []string) (*job.Job, error) {
+	if len(routingKeys) == 0 {
+		return nil, fmt.Errorf("at least one routing key must be specified")
+	}
+
+	// Validate all routing keys
+	for _, routingKey := range routingKeys {
+		if err := job.ValidateRoutingKey(routingKey); err != nil {
+			return nil, fmt.Errorf("invalid routing key '%s': %w", routingKey, err)
+		}
+	}
+
+	processingKey := q.processingQueueKey()
+	priorities := []job.JobPriority{job.PriorityHigh, job.PriorityNormal, job.PriorityLow}
+
+	// Build list of queue keys to check based on routing keys and priorities
+	// This creates the ordering: route1:high, route1:normal, route1:low, route2:high, ...
+	var queueKeys []string
+	for _, routingKey := range routingKeys {
+		for _, priority := range priorities {
+			queueKeys = append(queueKeys, q.routeQueueKey(routingKey, priority))
+		}
+	}
+
+	// Try each queue in order with blocking operations
+	for i, queueKey := range queueKeys {
+		// Calculate timeout based on position
+		// Earlier queues get shorter timeout (1s), last queue gets longer timeout (3s)
+		var timeout time.Duration
+		if i == len(queueKeys)-1 {
+			timeout = 3 * time.Second
+		} else {
+			timeout = 1 * time.Second
+		}
+
+		// Use BRPOPLPUSH for blocking dequeue with timeout
+		result, err := q.client.BRPopLPush(ctx, queueKey, processingKey, timeout).Result()
+		if err == redis.Nil {
+			// Queue is empty after timeout, try next queue
+			continue
+		}
+		if err != nil {
+			// Check if context was cancelled
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, fmt.Errorf("failed to dequeue job: %w", err)
+		}
+
+		jobID := result
+
+		// Retrieve job data
+		jobData, err := q.client.Get(ctx, q.jobKey(jobID)).Result()
+		if err != nil {
+			// Job data not found (corrupted reference) - move to dead letter queue
+			log.Printf("ERROR: Job data not found for ID %s (corrupted reference) - moving to dead letter queue", jobID)
+
+			pipe := q.client.Pipeline()
+			pipe.LPush(ctx, q.deadLetterQueueKey(), jobID)
+			pipe.LRem(ctx, processingKey, 1, jobID)
+			errorJob := map[string]interface{}{
+				"id":    jobID,
+				"error": "Job data not found (corrupted reference)",
+			}
+			errorData, _ := json.Marshal(errorJob)
+			pipe.Set(ctx, q.jobKey(jobID), errorData, q.failedJobTTL)
+			pipe.Exec(ctx)
+
+			// Skip this corrupted job and continue processing
+			continue
+		}
+
+		// Deserialize job
+		var j job.Job
+		if err := json.Unmarshal([]byte(jobData), &j); err != nil {
+			// Invalid/corrupted job data - move to dead letter queue
+			log.Printf("ERROR: Failed to unmarshal job %s (corrupted data) - moving to dead letter queue", jobID)
+
+			pipe := q.client.Pipeline()
+			pipe.LPush(ctx, q.deadLetterQueueKey(), jobID)
+			pipe.LRem(ctx, processingKey, 1, jobID)
+			errorJob := map[string]interface{}{
+				"id":            jobID,
+				"error":         fmt.Sprintf("Failed to unmarshal job: %v", err),
+				"corrupted_data": truncate(jobData, 500),
+			}
+			errorData, _ := json.Marshal(errorJob)
+			pipe.Set(ctx, q.jobKey(jobID), errorData, q.failedJobTTL)
+			pipe.Exec(ctx)
+
+			// Skip this corrupted job and continue processing
+			continue
+		}
+
+		log.Printf("Dequeued job %s from routing key '%s' with priority %s", j.ID, j.RoutingKey, j.Priority)
 		return &j, nil
 	}
 

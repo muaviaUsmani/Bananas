@@ -17,6 +17,7 @@ import (
 // QueueReader defines the interface for dequeuing jobs from the queue
 type QueueReader interface {
 	Dequeue(ctx context.Context, priorities []job.JobPriority) (*job.Job, error)
+	DequeueWithRouting(ctx context.Context, routingKeys []string) (*job.Job, error)
 	Fail(ctx context.Context, j *job.Job, errMsg string) error
 }
 
@@ -41,7 +42,8 @@ func NewPool(executor *Executor, queue QueueReader, concurrency int, jobTimeout 
 		Mode:              config.WorkerModeDefault,
 		Concurrency:       concurrency,
 		Priorities:        []job.JobPriority{job.PriorityHigh, job.PriorityNormal, job.PriorityLow},
-		JobTypes:          nil, // All job types
+		RoutingKeys:       []string{"default"}, // Default routing key
+		JobTypes:          nil,                  // All job types
 		SchedulerInterval: 1 * time.Second,
 		EnableScheduler:   true,
 	}
@@ -136,7 +138,15 @@ func (p *Pool) worker(ctx context.Context, workerID int) {
 			return
 		default:
 			// Try to dequeue a job (uses blocking operations internally)
-			j, err := p.queue.Dequeue(workerCtx, p.workerConfig.Priorities)
+			// Use routing-aware dequeue if routing keys are configured
+			var j *job.Job
+			var err error
+			if len(p.workerConfig.RoutingKeys) > 0 {
+				j, err = p.queue.DequeueWithRouting(workerCtx, p.workerConfig.RoutingKeys)
+			} else {
+				// Fall back to priority-based dequeue for backward compatibility
+				j, err = p.queue.Dequeue(workerCtx, p.workerConfig.Priorities)
+			}
 			if err != nil {
 				// Check if context was cancelled
 				if workerCtx.Err() != nil {

@@ -22,6 +22,10 @@ type Config struct {
 	JobTimeout time.Duration
 	// MaxRetries is the default maximum number of retry attempts for failed jobs
 	MaxRetries int
+	// WorkerRoutingKeys are the routing keys this worker handles (comma-separated)
+	// Examples: "default", "gpu", "gpu,default"
+	// Defaults to ["default"] if not specified
+	WorkerRoutingKeys []string
 	// CronSchedulerEnabled enables the periodic cron scheduler
 	CronSchedulerEnabled bool
 	// CronSchedulerInterval is the interval at which the cron scheduler checks for due schedules
@@ -44,6 +48,7 @@ func LoadConfig() (*Config, error) {
 		WorkerConcurrency:       getEnvAsInt("WORKER_CONCURRENCY", 5),
 		JobTimeout:              getEnvAsDuration("JOB_TIMEOUT", 5*time.Minute),
 		MaxRetries:              getEnvAsInt("MAX_RETRIES", 3),
+		WorkerRoutingKeys:       getEnvAsStringSlice("WORKER_ROUTING_KEYS", []string{"default"}),
 		CronSchedulerEnabled:    getEnvAsBool("CRON_SCHEDULER_ENABLED", true),
 		CronSchedulerInterval:   getEnvAsDuration("CRON_SCHEDULER_INTERVAL", 1*time.Second),
 		ResultBackendEnabled:    getEnvAsBool("RESULT_BACKEND_ENABLED", true),
@@ -65,6 +70,12 @@ func LoadConfig() (*Config, error) {
 	if cfg.MaxRetries < 0 {
 		return nil, fmt.Errorf("MAX_RETRIES cannot be negative")
 	}
+	if len(cfg.WorkerRoutingKeys) == 0 {
+		return nil, fmt.Errorf("WORKER_ROUTING_KEYS must contain at least one routing key")
+	}
+
+	// Note: routing key validation is done in the job package to avoid circular imports
+	// Worker will validate routing keys at startup
 
 	// Validate logging config
 	if err := cfg.Logging.Validate(); err != nil {

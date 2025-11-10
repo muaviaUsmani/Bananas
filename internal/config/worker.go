@@ -52,6 +52,12 @@ type WorkerConfig struct {
 	// Example: []job.PriorityHigh means only process high priority jobs
 	Priorities []job.JobPriority
 
+	// RoutingKeys specifies which routing keys this worker should handle
+	// Examples: ["default"], ["gpu"], ["gpu", "default"]
+	// Workers will process jobs from these routing keys in order (first has priority)
+	// Defaults to ["default"] if not specified
+	RoutingKeys []string
+
 	// JobTypes specifies which job types this worker should handle
 	// Empty slice means all job types
 	// Only applicable in job-specialized mode
@@ -73,6 +79,7 @@ func LoadWorkerConfig() (*WorkerConfig, error) {
 		Mode:              WorkerMode(getEnv("WORKER_MODE", string(WorkerModeDefault))),
 		Concurrency:       getEnvAsInt("WORKER_CONCURRENCY", 10),
 		Priorities:        parsePriorities(getEnv("WORKER_PRIORITIES", "")),
+		RoutingKeys:       getEnvAsStringSlice("WORKER_ROUTING_KEYS", []string{"default"}),
 		JobTypes:          parseJobTypes(getEnv("WORKER_JOB_TYPES", "")),
 		SchedulerInterval: getEnvAsDuration("SCHEDULER_INTERVAL", 1*time.Second),
 		EnableScheduler:   getEnvAsBool("ENABLE_SCHEDULER", true),

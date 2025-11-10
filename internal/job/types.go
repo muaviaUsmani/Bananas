@@ -2,6 +2,8 @@ package job
 
 import (
 	"encoding/json"
+	"fmt"
+	"regexp"
 	"time"
 
 	"github.com/google/uuid"
@@ -49,6 +51,10 @@ type Job struct {
 	Status JobStatus `json:"status"`
 	// Priority determines the processing order
 	Priority JobPriority `json:"priority"`
+	// RoutingKey determines which worker pool processes this job
+	// Workers subscribe to specific routing keys (e.g., "gpu", "email", "default")
+	// Defaults to "default" if not specified
+	RoutingKey string `json:"routing_key"`
 	// CreatedAt is when the job was created
 	CreatedAt time.Time `json:"created_at"`
 	// UpdatedAt is when the job was last updated
@@ -72,13 +78,13 @@ type Job struct {
 //	job := NewJob("resize_image", payload, PriorityHigh)
 func NewJob(name string, payload []byte, priority JobPriority, description ...string) *Job {
 	now := time.Now()
-	
+
 	// Extract optional description (take first if provided)
 	var desc string
 	if len(description) > 0 {
 		desc = description[0]
 	}
-	
+
 	return &Job{
 		ID:          uuid.New().String(),
 		Name:        name,
@@ -86,6 +92,7 @@ func NewJob(name string, payload []byte, priority JobPriority, description ...st
 		Payload:     payload,
 		Status:      StatusPending,
 		Priority:    priority,
+		RoutingKey:  "default", // Default routing key for backward compatibility
 		CreatedAt:   now,
 		UpdatedAt:   now,
 		Attempts:    0,
@@ -98,5 +105,32 @@ func NewJob(name string, payload []byte, priority JobPriority, description ...st
 func (j *Job) UpdateStatus(status JobStatus) {
 	j.Status = status
 	j.UpdatedAt = time.Now()
+}
+
+// SetRoutingKey sets the routing key for the job with validation
+// Returns an error if the routing key is invalid
+func (j *Job) SetRoutingKey(routingKey string) error {
+	if err := ValidateRoutingKey(routingKey); err != nil {
+		return err
+	}
+	j.RoutingKey = routingKey
+	j.UpdatedAt = time.Now()
+	return nil
+}
+
+// ValidateRoutingKey validates a routing key format
+// Routing keys must be alphanumeric with underscores/hyphens, 1-64 chars
+func ValidateRoutingKey(key string) error {
+	if key == "" {
+		return fmt.Errorf("routing key cannot be empty")
+	}
+	if len(key) > 64 {
+		return fmt.Errorf("routing key too long (max 64 chars, got %d)", len(key))
+	}
+	// Alphanumeric + underscore + hyphen only
+	if !regexp.MustCompile(`^[a-zA-Z0-9_-]+$`).MatchString(key) {
+		return fmt.Errorf("invalid routing key format: must contain only alphanumeric, underscore, or hyphen characters")
+	}
+	return nil
 }
 
