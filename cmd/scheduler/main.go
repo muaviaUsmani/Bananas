@@ -13,7 +13,18 @@ import (
 	"github.com/muaviaUsmani/bananas/internal/config"
 	"github.com/muaviaUsmani/bananas/internal/logger"
 	"github.com/muaviaUsmani/bananas/internal/queue"
+	"github.com/muaviaUsmani/bananas/internal/scheduler"
+	"github.com/redis/go-redis/v9"
 )
+
+// createRedisClient creates a Redis client from the Redis URL
+func createRedisClient(redisURL string) (*redis.Client, error) {
+	opts, err := redis.ParseURL(redisURL)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse Redis URL: %w", err)
+	}
+	return redis.NewClient(opts), nil
+}
 
 // connectWithRetry attempts to connect to Redis with exponential backoff
 func connectWithRetry(redisURL string, maxRetries int, log logger.Logger) (*queue.RedisQueue, error) {
@@ -92,9 +103,43 @@ func main() {
 
 	schedulerLog.Info("Successfully connected to Redis")
 
+	// Create Redis client for cron scheduler
+	redisClient, err := createRedisClient(cfg.RedisURL)
+	if err != nil {
+		schedulerLog.Error("Failed to create Redis client", "error", err)
+		os.Exit(1)
+	}
+	defer redisClient.Close()
+
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	// Initialize cron scheduler if enabled
+	var cronScheduler *scheduler.CronScheduler
+	if cfg.CronSchedulerEnabled {
+		registry := scheduler.NewRegistry()
+
+		// Register example schedules (users should replace this with their own schedules)
+		// Example: Daily report at midnight UTC
+		// registry.MustRegister(&scheduler.Schedule{
+		// 	ID:          "daily-report",
+		// 	Cron:        "0 0 * * *",
+		// 	Job:         "generate_report",
+		// 	Priority:    job.PriorityNormal,
+		// 	Timezone:    "UTC",
+		// 	Enabled:     true,
+		// 	Description: "Generate daily report",
+		// })
+
+		cronScheduler = scheduler.NewCronScheduler(registry, redisQueue, redisClient, cfg.CronSchedulerInterval)
+		schedulerLog.Info("Cron scheduler initialized",
+			"interval", cfg.CronSchedulerInterval,
+			"schedules", registry.Count())
+
+		// Start cron scheduler in background
+		go cronScheduler.Start(ctx)
+	}
 
 	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
