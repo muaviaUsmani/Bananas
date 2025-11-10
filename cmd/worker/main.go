@@ -14,7 +14,9 @@ import (
 	"github.com/muaviaUsmani/bananas/internal/logger"
 	"github.com/muaviaUsmani/bananas/internal/metrics"
 	"github.com/muaviaUsmani/bananas/internal/queue"
+	"github.com/muaviaUsmani/bananas/internal/result"
 	"github.com/muaviaUsmani/bananas/internal/worker"
+	"github.com/redis/go-redis/v9"
 )
 
 func main() {
@@ -77,6 +79,21 @@ func main() {
 	}
 	defer redisQueue.Close()
 
+	// Create result backend if enabled
+	var resultBackend result.Backend
+	if cfg.ResultBackendEnabled {
+		opts, err := redis.ParseURL(cfg.RedisURL)
+		if err != nil {
+			workerLog.Error("Failed to parse Redis URL for result backend", "error", err)
+			os.Exit(1)
+		}
+		redisClient := redis.NewClient(opts)
+		resultBackend = result.NewRedisBackend(redisClient, cfg.ResultBackendTTLSuccess, cfg.ResultBackendTTLFailure)
+		workerLog.Info("Result backend enabled",
+			"success_ttl", cfg.ResultBackendTTLSuccess,
+			"failure_ttl", cfg.ResultBackendTTLFailure)
+	}
+
 	// Create handler registry
 	registry := worker.NewRegistry()
 
@@ -90,6 +107,11 @@ func main() {
 
 	// Create executor with queue integration
 	executor := worker.NewExecutor(registry, redisQueue, workerCfg.Concurrency)
+
+	// Set result backend if enabled
+	if resultBackend != nil {
+		executor.SetResultBackend(resultBackend)
+	}
 
 	// Create worker pool with new configuration system
 	pool := worker.NewPoolWithConfig(executor, redisQueue, workerCfg, cfg.JobTimeout)
