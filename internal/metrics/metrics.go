@@ -73,7 +73,7 @@ func (c *Collector) RecordJobStarted(priority job.JobPriority) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.jobsByPriority[priority]++
-	c.jobsByStatus[job.JobStatusProcessing]++
+	c.jobsByStatus[job.StatusProcessing]++
 }
 
 // RecordJobCompleted records a successfully completed job
@@ -82,8 +82,8 @@ func (c *Collector) RecordJobCompleted(priority job.JobPriority, duration time.D
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.jobsByStatus[job.JobStatusProcessing]--
-	c.jobsByStatus[job.JobStatusCompleted]++
+	c.jobsByStatus[job.StatusProcessing]--
+	c.jobsByStatus[job.StatusCompleted]++
 	c.totalDuration += duration
 	c.operationCount++
 }
@@ -94,8 +94,8 @@ func (c *Collector) RecordJobFailed(priority job.JobPriority, duration time.Dura
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.jobsByStatus[job.JobStatusProcessing]--
-	c.jobsByStatus[job.JobStatusFailed]++
+	c.jobsByStatus[job.StatusProcessing]--
+	c.jobsByStatus[job.StatusFailed]++
 	c.totalDuration += duration
 	c.operationCount++
 	c.errorCount++

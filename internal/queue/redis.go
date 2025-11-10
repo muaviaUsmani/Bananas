@@ -493,7 +493,7 @@ func (q *RedisQueue) GetJob(ctx context.Context, jobID string) (*job.Job, error)
 // This is called periodically and best-effort (errors are logged but not returned)
 func (q *RedisQueue) updateQueueMetrics(ctx context.Context) {
 	// Get queue depths for all priorities
-	priorities := []job.JobPriority{job.JobPriorityHigh, job.JobPriorityNormal, job.JobPriorityLow}
+	priorities := []job.JobPriority{job.PriorityHigh, job.PriorityNormal, job.PriorityLow}
 
 	for _, priority := range priorities {
 		depth, err := q.client.LLen(ctx, q.queueKey(priority)).Result()

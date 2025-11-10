@@ -28,43 +28,43 @@ func TestNewCollector(t *testing.T) {
 func TestRecordJobStarted(t *testing.T) {
 	c := NewCollector()
 
-	c.RecordJobStarted(job.JobPriorityHigh)
-	c.RecordJobStarted(job.JobPriorityNormal)
-	c.RecordJobStarted(job.JobPriorityHigh)
+	c.RecordJobStarted(job.PriorityHigh)
+	c.RecordJobStarted(job.PriorityNormal)
+	c.RecordJobStarted(job.PriorityHigh)
 
 	metrics := c.GetMetrics()
 	if metrics.TotalJobsProcessed != 3 {
 		t.Errorf("Expected TotalJobsProcessed = 3, got %d", metrics.TotalJobsProcessed)
 	}
-	if metrics.JobsByPriority[job.JobPriorityHigh] != 2 {
-		t.Errorf("Expected High priority count = 2, got %d", metrics.JobsByPriority[job.JobPriorityHigh])
+	if metrics.JobsByPriority[job.PriorityHigh] != 2 {
+		t.Errorf("Expected High priority count = 2, got %d", metrics.JobsByPriority[job.PriorityHigh])
 	}
-	if metrics.JobsByPriority[job.JobPriorityNormal] != 1 {
-		t.Errorf("Expected Normal priority count = 1, got %d", metrics.JobsByPriority[job.JobPriorityNormal])
+	if metrics.JobsByPriority[job.PriorityNormal] != 1 {
+		t.Errorf("Expected Normal priority count = 1, got %d", metrics.JobsByPriority[job.PriorityNormal])
 	}
-	if metrics.JobsByStatus[job.JobStatusProcessing] != 3 {
-		t.Errorf("Expected Processing status count = 3, got %d", metrics.JobsByStatus[job.JobStatusProcessing])
+	if metrics.JobsByStatus[job.StatusProcessing] != 3 {
+		t.Errorf("Expected Processing status count = 3, got %d", metrics.JobsByStatus[job.StatusProcessing])
 	}
 }
 
 func TestRecordJobCompleted(t *testing.T) {
 	c := NewCollector()
 
-	c.RecordJobStarted(job.JobPriorityHigh)
-	c.RecordJobCompleted(job.JobPriorityHigh, 100*time.Millisecond)
+	c.RecordJobStarted(job.PriorityHigh)
+	c.RecordJobCompleted(job.PriorityHigh, 100*time.Millisecond)
 
-	c.RecordJobStarted(job.JobPriorityNormal)
-	c.RecordJobCompleted(job.JobPriorityNormal, 200*time.Millisecond)
+	c.RecordJobStarted(job.PriorityNormal)
+	c.RecordJobCompleted(job.PriorityNormal, 200*time.Millisecond)
 
 	metrics := c.GetMetrics()
 	if metrics.TotalJobsCompleted != 2 {
 		t.Errorf("Expected TotalJobsCompleted = 2, got %d", metrics.TotalJobsCompleted)
 	}
-	if metrics.JobsByStatus[job.JobStatusCompleted] != 2 {
-		t.Errorf("Expected Completed status count = 2, got %d", metrics.JobsByStatus[job.JobStatusCompleted])
+	if metrics.JobsByStatus[job.StatusCompleted] != 2 {
+		t.Errorf("Expected Completed status count = 2, got %d", metrics.JobsByStatus[job.StatusCompleted])
 	}
-	if metrics.JobsByStatus[job.JobStatusProcessing] != 0 {
-		t.Errorf("Expected Processing status count = 0, got %d", metrics.JobsByStatus[job.JobStatusProcessing])
+	if metrics.JobsByStatus[job.StatusProcessing] != 0 {
+		t.Errorf("Expected Processing status count = 0, got %d", metrics.JobsByStatus[job.StatusProcessing])
 	}
 
 	// Average duration should be 150ms
@@ -77,18 +77,18 @@ func TestRecordJobCompleted(t *testing.T) {
 func TestRecordJobFailed(t *testing.T) {
 	c := NewCollector()
 
-	c.RecordJobStarted(job.JobPriorityHigh)
-	c.RecordJobFailed(job.JobPriorityHigh, 50*time.Millisecond)
+	c.RecordJobStarted(job.PriorityHigh)
+	c.RecordJobFailed(job.PriorityHigh, 50*time.Millisecond)
 
 	metrics := c.GetMetrics()
 	if metrics.TotalJobsFailed != 1 {
 		t.Errorf("Expected TotalJobsFailed = 1, got %d", metrics.TotalJobsFailed)
 	}
-	if metrics.JobsByStatus[job.JobStatusFailed] != 1 {
-		t.Errorf("Expected Failed status count = 1, got %d", metrics.JobsByStatus[job.JobStatusFailed])
+	if metrics.JobsByStatus[job.StatusFailed] != 1 {
+		t.Errorf("Expected Failed status count = 1, got %d", metrics.JobsByStatus[job.StatusFailed])
 	}
-	if metrics.JobsByStatus[job.JobStatusProcessing] != 0 {
-		t.Errorf("Expected Processing status count = 0, got %d", metrics.JobsByStatus[job.JobStatusProcessing])
+	if metrics.JobsByStatus[job.StatusProcessing] != 0 {
+		t.Errorf("Expected Processing status count = 0, got %d", metrics.JobsByStatus[job.StatusProcessing])
 	}
 
 	// Error rate should be 100% (1 failure out of 1 operation)
@@ -101,17 +101,17 @@ func TestMixedJobOutcomes(t *testing.T) {
 	c := NewCollector()
 
 	// 3 completed, 1 failed
-	c.RecordJobStarted(job.JobPriorityHigh)
-	c.RecordJobCompleted(job.JobPriorityHigh, 100*time.Millisecond)
+	c.RecordJobStarted(job.PriorityHigh)
+	c.RecordJobCompleted(job.PriorityHigh, 100*time.Millisecond)
 
-	c.RecordJobStarted(job.JobPriorityNormal)
-	c.RecordJobCompleted(job.JobPriorityNormal, 200*time.Millisecond)
+	c.RecordJobStarted(job.PriorityNormal)
+	c.RecordJobCompleted(job.PriorityNormal, 200*time.Millisecond)
 
-	c.RecordJobStarted(job.JobPriorityLow)
-	c.RecordJobCompleted(job.JobPriorityLow, 150*time.Millisecond)
+	c.RecordJobStarted(job.PriorityLow)
+	c.RecordJobCompleted(job.PriorityLow, 150*time.Millisecond)
 
-	c.RecordJobStarted(job.JobPriorityHigh)
-	c.RecordJobFailed(job.JobPriorityHigh, 50*time.Millisecond)
+	c.RecordJobStarted(job.PriorityHigh)
+	c.RecordJobFailed(job.PriorityHigh, 50*time.Millisecond)
 
 	metrics := c.GetMetrics()
 	if metrics.TotalJobsProcessed != 4 {
@@ -139,19 +139,19 @@ func TestMixedJobOutcomes(t *testing.T) {
 func TestRecordQueueDepth(t *testing.T) {
 	c := NewCollector()
 
-	c.RecordQueueDepth(job.JobPriorityHigh, 10)
-	c.RecordQueueDepth(job.JobPriorityNormal, 25)
-	c.RecordQueueDepth(job.JobPriorityLow, 5)
+	c.RecordQueueDepth(job.PriorityHigh, 10)
+	c.RecordQueueDepth(job.PriorityNormal, 25)
+	c.RecordQueueDepth(job.PriorityLow, 5)
 
 	metrics := c.GetMetrics()
-	if metrics.QueueDepths[job.JobPriorityHigh] != 10 {
-		t.Errorf("Expected High priority depth = 10, got %d", metrics.QueueDepths[job.JobPriorityHigh])
+	if metrics.QueueDepths[job.PriorityHigh] != 10 {
+		t.Errorf("Expected High priority depth = 10, got %d", metrics.QueueDepths[job.PriorityHigh])
 	}
-	if metrics.QueueDepths[job.JobPriorityNormal] != 25 {
-		t.Errorf("Expected Normal priority depth = 25, got %d", metrics.QueueDepths[job.JobPriorityNormal])
+	if metrics.QueueDepths[job.PriorityNormal] != 25 {
+		t.Errorf("Expected Normal priority depth = 25, got %d", metrics.QueueDepths[job.PriorityNormal])
 	}
-	if metrics.QueueDepths[job.JobPriorityLow] != 5 {
-		t.Errorf("Expected Low priority depth = 5, got %d", metrics.QueueDepths[job.JobPriorityLow])
+	if metrics.QueueDepths[job.PriorityLow] != 5 {
+		t.Errorf("Expected Low priority depth = 5, got %d", metrics.QueueDepths[job.PriorityLow])
 	}
 }
 
@@ -182,9 +182,9 @@ func TestReset(t *testing.T) {
 	c := NewCollector()
 
 	// Add some data
-	c.RecordJobStarted(job.JobPriorityHigh)
-	c.RecordJobCompleted(job.JobPriorityHigh, 100*time.Millisecond)
-	c.RecordQueueDepth(job.JobPriorityHigh, 10)
+	c.RecordJobStarted(job.PriorityHigh)
+	c.RecordJobCompleted(job.PriorityHigh, 100*time.Millisecond)
+	c.RecordQueueDepth(job.PriorityHigh, 10)
 	c.RecordWorkerActivity(5, 10)
 
 	// Verify data exists
@@ -247,8 +247,8 @@ func TestGlobalCollector(t *testing.T) {
 	ResetMetrics()
 
 	// Record some metrics using global functions
-	Default().RecordJobStarted(job.JobPriorityHigh)
-	Default().RecordJobCompleted(job.JobPriorityHigh, 100*time.Millisecond)
+	Default().RecordJobStarted(job.PriorityHigh)
+	Default().RecordJobCompleted(job.PriorityHigh, 100*time.Millisecond)
 
 	metrics := GetMetrics()
 	if metrics.TotalJobsProcessed != 1 {
@@ -274,8 +274,8 @@ func TestConcurrentAccess(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		go func() {
 			for j := 0; j < 100; j++ {
-				c.RecordJobStarted(job.JobPriorityNormal)
-				c.RecordJobCompleted(job.JobPriorityNormal, 1*time.Millisecond)
+				c.RecordJobStarted(job.PriorityNormal)
+				c.RecordJobCompleted(job.PriorityNormal, 1*time.Millisecond)
 			}
 			done <- true
 		}()
@@ -302,7 +302,7 @@ func BenchmarkRecordJobStarted(b *testing.B) {
 	c := NewCollector()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		c.RecordJobStarted(job.JobPriorityHigh)
+		c.RecordJobStarted(job.PriorityHigh)
 	}
 }
 
@@ -310,7 +310,7 @@ func BenchmarkRecordJobCompleted(b *testing.B) {
 	c := NewCollector()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		c.RecordJobCompleted(job.JobPriorityHigh, 1*time.Millisecond)
+		c.RecordJobCompleted(job.PriorityHigh, 1*time.Millisecond)
 	}
 }
 
@@ -318,8 +318,8 @@ func BenchmarkGetMetrics(b *testing.B) {
 	c := NewCollector()
 	// Add some data
 	for i := 0; i < 1000; i++ {
-		c.RecordJobStarted(job.JobPriorityHigh)
-		c.RecordJobCompleted(job.JobPriorityHigh, 1*time.Millisecond)
+		c.RecordJobStarted(job.PriorityHigh)
+		c.RecordJobCompleted(job.PriorityHigh, 1*time.Millisecond)
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -332,8 +332,8 @@ func BenchmarkConcurrentRecording(b *testing.B) {
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			c.RecordJobStarted(job.JobPriorityNormal)
-			c.RecordJobCompleted(job.JobPriorityNormal, 1*time.Millisecond)
+			c.RecordJobStarted(job.PriorityNormal)
+			c.RecordJobCompleted(job.PriorityNormal, 1*time.Millisecond)
 		}
 	})
 }
