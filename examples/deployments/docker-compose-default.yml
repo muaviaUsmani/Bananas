@@ -1,0 +1,110 @@
+# Docker Compose - Default Mode Configuration
+# Use case: Standard production (1K-10K jobs/hour), horizontally scalable
+
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --maxmemory 2gb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Worker pool - can be scaled horizontally
+  worker:
+    image: bananas-worker:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      # Worker mode configuration
+      - WORKER_MODE=default          # Priority-aware processing
+      - WORKER_CONCURRENCY=20        # 20 concurrent workers per instance
+      - WORKER_PRIORITIES=high,normal,low
+      - ENABLE_SCHEDULER=false       # Use dedicated scheduler
+
+      # Redis configuration
+      - REDIS_URL=redis://redis:6379
+
+      # Job configuration
+      - JOB_TIMEOUT=5m
+      - MAX_RETRIES=3
+
+      # Logging configuration
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - LOG_CONSOLE_ENABLED=true
+      - LOG_FILE_ENABLED=true
+      - LOG_FILE_PATH=/var/log/bananas/worker.log
+      - LOG_FILE_MAX_SIZE_MB=100
+      - LOG_FILE_MAX_BACKUPS=5
+
+    volumes:
+      - worker-logs:/var/log/bananas
+    restart: unless-stopped
+    deploy:
+      replicas: 3  # Run 3 worker instances (60 total workers)
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  # Dedicated scheduler - single instance only
+  scheduler:
+    image: bananas-worker:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - WORKER_MODE=scheduler-only
+      - SCHEDULER_INTERVAL=1s
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=info
+    restart: unless-stopped
+    deploy:
+      replicas: 1  # MUST be exactly 1
+
+  # API server for job enqueuing
+  api:
+    image: bananas-api:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - API_PORT=8080
+      - LOG_LEVEL=info
+    restart: unless-stopped
+    deploy:
+      replicas: 2  # Load balanced API instances
+
+volumes:
+  redis-data:
+  worker-logs:
+
+# Usage:
+# docker-compose -f docker-compose-default.yml up
+#
+# Scale workers dynamically:
+# docker-compose -f docker-compose-default.yml up --scale worker=5
+#
+# View logs:
+# docker-compose -f docker-compose-default.yml logs -f worker
+#
+# Suitable for:
+# - Standard production deployments
+# - Medium traffic (1K-10K jobs/hour)
+# - Horizontally scalable
+# - 3-5 worker instances recommended

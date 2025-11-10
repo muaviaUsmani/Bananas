@@ -1,0 +1,626 @@
+# Kubernetes Deployment - Multi-Tier Worker Architecture
+# Complete deployment with all worker modes and autoscaling
+
+---
+# Redis StatefulSet
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  namespace: bananas
+spec:
+  serviceName: redis
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        args:
+        - redis-server
+        - --maxmemory
+        - "4gb"
+        - --maxmemory-policy
+        - allkeys-lru
+        ports:
+        - containerPort: 6379
+          name: redis
+        resources:
+          requests:
+            cpu: "1"
+            memory: "4Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+        livenessProbe:
+          exec:
+            command: ["redis-cli", "ping"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          exec:
+            command: ["redis-cli", "ping"]
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+  volumeClaimTemplates:
+  - metadata:
+      name: redis-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      resources:
+        requests:
+          storage: 10Gi
+
+---
+# Redis Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: bananas
+spec:
+  selector:
+    app: redis
+  ports:
+  - port: 6379
+    targetPort: 6379
+    name: redis
+  clusterIP: None  # Headless service for StatefulSet
+
+---
+# ConfigMap for common configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bananas-config
+  namespace: bananas
+data:
+  REDIS_URL: "redis://redis:6379"
+  LOG_LEVEL: "info"
+  LOG_FORMAT: "json"
+  LOG_CONSOLE_ENABLED: "true"
+  JOB_TIMEOUT: "5m"
+  MAX_RETRIES: "3"
+
+---
+# Default Mode Workers - General purpose production
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-default
+  namespace: bananas
+  labels:
+    app: worker
+    mode: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: worker
+      mode: default
+  template:
+    metadata:
+      labels:
+        app: worker
+        mode: default
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "6061"
+    spec:
+      containers:
+      - name: worker
+        image: bananas-worker:latest
+        envFrom:
+        - configMapRef:
+            name: bananas-config
+        env:
+        - name: WORKER_MODE
+          value: "default"
+        - name: WORKER_CONCURRENCY
+          value: "20"
+        - name: WORKER_PRIORITIES
+          value: "high,normal,low"
+        - name: ENABLE_SCHEDULER
+          value: "false"
+        ports:
+        - containerPort: 6061
+          name: pprof
+          protocol: TCP
+        resources:
+          requests:
+            cpu: "1"
+            memory: "1Gi"
+          limits:
+            cpu: "2"
+            memory: "2Gi"
+        livenessProbe:
+          httpGet:
+            path: /debug/pprof/
+            port: 6061
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /debug/pprof/
+            port: 6061
+          initialDelaySeconds: 10
+          periodSeconds: 10
+
+---
+# High Priority Workers - Specialized mode
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-high-priority
+  namespace: bananas
+  labels:
+    app: worker
+    mode: specialized
+    priority: high
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: worker
+      mode: specialized
+      priority: high
+  template:
+    metadata:
+      labels:
+        app: worker
+        mode: specialized
+        priority: high
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "6061"
+    spec:
+      # Prefer scheduling on high-performance nodes
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            preference:
+              matchExpressions:
+              - key: workload
+                operator: In
+                values:
+                - high-priority
+      containers:
+      - name: worker
+        image: bananas-worker:latest
+        envFrom:
+        - configMapRef:
+            name: bananas-config
+        env:
+        - name: WORKER_MODE
+          value: "specialized"
+        - name: WORKER_PRIORITIES
+          value: "high"
+        - name: WORKER_CONCURRENCY
+          value: "50"
+        - name: ENABLE_SCHEDULER
+          value: "false"
+        ports:
+        - containerPort: 6061
+          name: pprof
+        resources:
+          requests:
+            cpu: "2"
+            memory: "2Gi"
+          limits:
+            cpu: "4"
+            memory: "4Gi"
+        livenessProbe:
+          httpGet:
+            path: /debug/pprof/
+            port: 6061
+          initialDelaySeconds: 30
+          periodSeconds: 30
+
+---
+# Normal Priority Workers - Specialized mode
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-normal-priority
+  namespace: bananas
+  labels:
+    app: worker
+    mode: specialized
+    priority: normal
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: worker
+      mode: specialized
+      priority: normal
+  template:
+    metadata:
+      labels:
+        app: worker
+        mode: specialized
+        priority: normal
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "6061"
+    spec:
+      containers:
+      - name: worker
+        image: bananas-worker:latest
+        envFrom:
+        - configMapRef:
+            name: bananas-config
+        env:
+        - name: WORKER_MODE
+          value: "specialized"
+        - name: WORKER_PRIORITIES
+          value: "normal"
+        - name: WORKER_CONCURRENCY
+          value: "30"
+        - name: ENABLE_SCHEDULER
+          value: "false"
+        ports:
+        - containerPort: 6061
+          name: pprof
+        resources:
+          requests:
+            cpu: "1"
+            memory: "1Gi"
+          limits:
+            cpu: "2"
+            memory: "2Gi"
+
+---
+# Low Priority Workers - Specialized mode
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-low-priority
+  namespace: bananas
+  labels:
+    app: worker
+    mode: specialized
+    priority: low
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: worker
+      mode: specialized
+      priority: low
+  template:
+    metadata:
+      labels:
+        app: worker
+        mode: specialized
+        priority: low
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "6061"
+    spec:
+      containers:
+      - name: worker
+        image: bananas-worker:latest
+        envFrom:
+        - configMapRef:
+            name: bananas-config
+        env:
+        - name: WORKER_MODE
+          value: "specialized"
+        - name: WORKER_PRIORITIES
+          value: "low"
+        - name: WORKER_CONCURRENCY
+          value: "10"
+        - name: ENABLE_SCHEDULER
+          value: "false"
+        - name: JOB_TIMEOUT
+          value: "10m"
+        ports:
+        - containerPort: 6061
+          name: pprof
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+
+---
+# CPU-Intensive Workers - Job-specialized mode
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-cpu-intensive
+  namespace: bananas
+  labels:
+    app: worker
+    mode: job-specialized
+    workload: cpu
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: worker
+      mode: job-specialized
+      workload: cpu
+  template:
+    metadata:
+      labels:
+        app: worker
+        mode: job-specialized
+        workload: cpu
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "6061"
+    spec:
+      # Require CPU-optimized nodes
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: workload
+                operator: In
+                values:
+                - cpu-optimized
+      containers:
+      - name: worker
+        image: bananas-worker:latest
+        envFrom:
+        - configMapRef:
+            name: bananas-config
+        env:
+        - name: WORKER_MODE
+          value: "job-specialized"
+        - name: WORKER_JOB_TYPES
+          value: "send_email,generate_report,process_analytics"
+        - name: WORKER_PRIORITIES
+          value: "high,normal,low"
+        - name: WORKER_CONCURRENCY
+          value: "10"
+        - name: ENABLE_SCHEDULER
+          value: "false"
+        - name: JOB_TIMEOUT
+          value: "10m"
+        ports:
+        - containerPort: 6061
+          name: pprof
+        resources:
+          requests:
+            cpu: "2"
+            memory: "1Gi"
+          limits:
+            cpu: "4"
+            memory: "2Gi"
+
+---
+# I/O-Intensive Workers - Job-specialized mode
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-io-intensive
+  namespace: bananas
+  labels:
+    app: worker
+    mode: job-specialized
+    workload: io
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: worker
+      mode: job-specialized
+      workload: io
+  template:
+    metadata:
+      labels:
+        app: worker
+        mode: job-specialized
+        workload: io
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "6061"
+    spec:
+      containers:
+      - name: worker
+        image: bananas-worker:latest
+        envFrom:
+        - configMapRef:
+            name: bananas-config
+        env:
+        - name: WORKER_MODE
+          value: "job-specialized"
+        - name: WORKER_JOB_TYPES
+          value: "fetch_data,process_images,upload_files,download_content"
+        - name: WORKER_PRIORITIES
+          value: "high,normal,low"
+        - name: WORKER_CONCURRENCY
+          value: "50"
+        - name: ENABLE_SCHEDULER
+          value: "false"
+        ports:
+        - containerPort: 6061
+          name: pprof
+        resources:
+          requests:
+            cpu: "1"
+            memory: "2Gi"
+          limits:
+            cpu: "2"
+            memory: "4Gi"
+
+---
+# Scheduler - Dedicated scheduler-only mode
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: scheduler
+  namespace: bananas
+  labels:
+    app: scheduler
+spec:
+  replicas: 1  # MUST be exactly 1
+  selector:
+    matchLabels:
+      app: scheduler
+  template:
+    metadata:
+      labels:
+        app: scheduler
+    spec:
+      containers:
+      - name: scheduler
+        image: bananas-worker:latest
+        envFrom:
+        - configMapRef:
+            name: bananas-config
+        env:
+        - name: WORKER_MODE
+          value: "scheduler-only"
+        - name: SCHEDULER_INTERVAL
+          value: "1s"
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+        livenessProbe:
+          httpGet:
+            path: /debug/pprof/
+            port: 6061
+          initialDelaySeconds: 30
+          periodSeconds: 30
+
+---
+# API Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+  namespace: bananas
+  labels:
+    app: api
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+      - name: api
+        image: bananas-api:latest
+        envFrom:
+        - configMapRef:
+            name: bananas-config
+        env:
+        - name: API_PORT
+          value: "8080"
+        ports:
+        - containerPort: 8080
+          name: http
+        resources:
+          requests:
+            cpu: "500m"
+            memory: "512Mi"
+          limits:
+            cpu: "1"
+            memory: "1Gi"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+# API Service (LoadBalancer)
+apiVersion: v1
+kind: Service
+metadata:
+  name: api
+  namespace: bananas
+spec:
+  type: LoadBalancer
+  selector:
+    app: api
+  ports:
+  - port: 80
+    targetPort: 8080
+    name: http
+
+---
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: bananas
+
+---
+# PodDisruptionBudget for high-priority workers
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: worker-high-priority-pdb
+  namespace: bananas
+spec:
+  minAvailable: 2  # Always keep at least 2 high-priority workers running
+  selector:
+    matchLabels:
+      app: worker
+      priority: high
+
+---
+# PodDisruptionBudget for scheduler (prevent accidental termination)
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: scheduler-pdb
+  namespace: bananas
+spec:
+  minAvailable: 1  # Always keep scheduler running
+  selector:
+    matchLabels:
+      app: scheduler
+
+# Usage:
+# kubectl apply -f k8s-deployment.yml
+#
+# Choose which workers to deploy:
+# - For simple production: Deploy worker-default + scheduler
+# - For priority isolation: Deploy worker-{high,normal,low}-priority + scheduler
+# - For job-type isolation: Deploy worker-{cpu,io}-intensive + scheduler
+# - Can mix modes: Deploy both priority-specialized AND job-specialized workers
+#
+# Scale specific workers:
+# kubectl scale deployment worker-high-priority --replicas=5
+# kubectl scale deployment worker-io-intensive --replicas=10
+#
+# Monitor workers:
+# kubectl logs -f deployment/worker-high-priority
+# kubectl top pods -l app=worker
+#
+# View metrics:
+# kubectl logs deployment/worker-default | grep "System metrics"

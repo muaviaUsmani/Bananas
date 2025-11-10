@@ -1,0 +1,74 @@
+# Docker Compose - Thin Mode Configuration
+# Use case: Development, testing, low traffic (<100 jobs/hour)
+
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Single worker process handling all queues
+  worker:
+    image: bananas-worker:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      # Worker mode configuration
+      - WORKER_MODE=thin
+      - WORKER_CONCURRENCY=5
+      - WORKER_PRIORITIES=high,normal,low  # All priorities (default)
+      - ENABLE_SCHEDULER=true              # Run scheduler in same process
+
+      # Redis configuration
+      - REDIS_URL=redis://redis:6379
+
+      # Job configuration
+      - JOB_TIMEOUT=5m
+      - MAX_RETRIES=3
+
+      # Logging configuration
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - LOG_CONSOLE_ENABLED=true
+      - LOG_FILE_ENABLED=false
+
+    restart: unless-stopped
+
+  # API server for job enqueuing
+  api:
+    image: bananas-api:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - API_PORT=8080
+      - LOG_LEVEL=info
+    restart: unless-stopped
+
+volumes:
+  redis-data:
+
+# Usage:
+# docker-compose -f docker-compose-thin.yml up
+#
+# Scale workers (not recommended for thin mode, use default mode instead):
+# docker-compose -f docker-compose-thin.yml up --scale worker=1
+#
+# Suitable for:
+# - Development environments
+# - CI/CD testing
+# - Very low traffic production (<100 jobs/hour)
+# - Single server deployments
