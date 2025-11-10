@@ -25,6 +25,13 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Load worker-specific configuration
+	workerCfg, err := config.LoadWorkerConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Failed to load worker config: %v\n", err)
+		os.Exit(1)
+	}
+
 	// Initialize logger
 	log, err := logger.NewLogger(cfg.Logging)
 	if err != nil {
@@ -40,9 +47,15 @@ func main() {
 	workerLog := log.WithComponent(logger.ComponentWorker).WithSource(logger.LogSourceInternal)
 
 	workerLog.Info("Worker starting",
-		"concurrency", cfg.WorkerConcurrency,
+		"mode", workerCfg.Mode,
+		"concurrency", workerCfg.Concurrency,
+		"priorities", len(workerCfg.Priorities),
+		"job_types", len(workerCfg.JobTypes),
 		"job_timeout", cfg.JobTimeout,
 		"redis_url", cfg.RedisURL)
+
+	// Log detailed worker configuration
+	workerLog.Info("Worker configuration details", "config", workerCfg.String())
 
 	// Start pprof server on separate port for profiling
 	pprofPort := os.Getenv("PPROF_PORT")
@@ -76,10 +89,10 @@ func main() {
 	workerLog.Info("Registered job handlers", "count", registry.Count())
 
 	// Create executor with queue integration
-	executor := worker.NewExecutor(registry, redisQueue, cfg.WorkerConcurrency)
+	executor := worker.NewExecutor(registry, redisQueue, workerCfg.Concurrency)
 
-	// Create worker pool
-	pool := worker.NewPool(executor, redisQueue, cfg.WorkerConcurrency, cfg.JobTimeout)
+	// Create worker pool with new configuration system
+	pool := worker.NewPoolWithConfig(executor, redisQueue, workerCfg, cfg.JobTimeout)
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())

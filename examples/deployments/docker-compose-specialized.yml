@@ -1,0 +1,206 @@
+# Docker Compose - Specialized Mode Configuration
+# Use case: High traffic (10K+ jobs/hour), dedicated resources per priority queue
+
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --maxmemory 4gb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # High priority workers - Maximum resources and replicas
+  worker-high:
+    image: bananas-worker:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      # Specialized mode - only process high priority queue
+      - WORKER_MODE=specialized
+      - WORKER_PRIORITIES=high
+      - WORKER_CONCURRENCY=50       # High concurrency for critical jobs
+      - ENABLE_SCHEDULER=false      # Use dedicated scheduler
+
+      # Redis configuration
+      - REDIS_URL=redis://redis:6379
+
+      # Job configuration
+      - JOB_TIMEOUT=5m
+      - MAX_RETRIES=3
+
+      # Logging configuration
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - LOG_CONSOLE_ENABLED=true
+      - LOG_FILE_ENABLED=true
+      - LOG_FILE_PATH=/var/log/bananas/worker-high.log
+      - LOG_FILE_MAX_SIZE_MB=100
+      - LOG_FILE_MAX_BACKUPS=5
+
+    volumes:
+      - worker-high-logs:/var/log/bananas
+    restart: unless-stopped
+    deploy:
+      replicas: 3  # 3 instances × 50 workers = 150 workers for high priority
+      resources:
+        limits:
+          cpus: '4'
+          memory: 4G
+        reservations:
+          cpus: '2'
+          memory: 2G
+
+  # Normal priority workers - Moderate resources
+  worker-normal:
+    image: bananas-worker:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - WORKER_MODE=specialized
+      - WORKER_PRIORITIES=normal
+      - WORKER_CONCURRENCY=30       # Medium concurrency
+      - ENABLE_SCHEDULER=false
+
+      - REDIS_URL=redis://redis:6379
+      - JOB_TIMEOUT=5m
+      - MAX_RETRIES=3
+
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - LOG_CONSOLE_ENABLED=true
+      - LOG_FILE_ENABLED=true
+      - LOG_FILE_PATH=/var/log/bananas/worker-normal.log
+      - LOG_FILE_MAX_SIZE_MB=100
+      - LOG_FILE_MAX_BACKUPS=5
+
+    volumes:
+      - worker-normal-logs:/var/log/bananas
+    restart: unless-stopped
+    deploy:
+      replicas: 2  # 2 instances × 30 workers = 60 workers for normal priority
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  # Low priority workers - Minimal resources
+  worker-low:
+    image: bananas-worker:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - WORKER_MODE=specialized
+      - WORKER_PRIORITIES=low
+      - WORKER_CONCURRENCY=10       # Low concurrency for background tasks
+      - ENABLE_SCHEDULER=false
+
+      - REDIS_URL=redis://redis:6379
+      - JOB_TIMEOUT=10m             # Longer timeout for background jobs
+      - MAX_RETRIES=2
+
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - LOG_CONSOLE_ENABLED=true
+      - LOG_FILE_ENABLED=true
+      - LOG_FILE_PATH=/var/log/bananas/worker-low.log
+      - LOG_FILE_MAX_SIZE_MB=50
+      - LOG_FILE_MAX_BACKUPS=3
+
+    volumes:
+      - worker-low-logs:/var/log/bananas
+    restart: unless-stopped
+    deploy:
+      replicas: 1  # 1 instance × 10 workers = 10 workers for low priority
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+
+  # Dedicated scheduler - single instance only
+  scheduler:
+    image: bananas-worker:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - WORKER_MODE=scheduler-only
+      - SCHEDULER_INTERVAL=1s
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+    restart: unless-stopped
+    deploy:
+      replicas: 1  # MUST be exactly 1
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  # API server for job enqueuing
+  api:
+    image: bananas-api:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - API_PORT=8080
+      - LOG_LEVEL=info
+    restart: unless-stopped
+    deploy:
+      replicas: 2  # Load balanced API instances
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+volumes:
+  redis-data:
+  worker-high-logs:
+  worker-normal-logs:
+  worker-low-logs:
+
+# Usage:
+# docker-compose -f docker-compose-specialized.yml up
+#
+# Scale specific priority workers:
+# docker-compose -f docker-compose-specialized.yml up --scale worker-high=5
+# docker-compose -f docker-compose-specialized.yml up --scale worker-normal=3
+#
+# Monitor specific priority queue:
+# docker-compose -f docker-compose-specialized.yml logs -f worker-high
+#
+# Resource allocation:
+# Total: 150 high + 60 normal + 10 low = 220 workers
+# High priority workers get 4x resources of low priority
+#
+# Suitable for:
+# - High traffic production (10K+ jobs/hour)
+# - Priority isolation (prevent low-priority blocking high)
+# - Fine-grained scaling per priority level
+# - SLA-based job processing guarantees
+#
+# Benefits:
+# - High priority jobs never wait for low priority
+# - Independent scaling per priority
+# - Resource allocation matches business priority
+# - Better observability per priority queue

@@ -49,8 +49,8 @@ func TestNewPool(t *testing.T) {
 	if pool == nil {
 		t.Fatal("expected pool to be created")
 	}
-	if pool.concurrency != 5 {
-		t.Errorf("expected concurrency 5, got %d", pool.concurrency)
+	if pool.workerConfig.Concurrency != 5 {
+		t.Errorf("expected concurrency 5, got %d", pool.workerConfig.Concurrency)
 	}
 	if pool.jobTimeout != 10*time.Second {
 		t.Errorf("expected timeout 10s, got %v", pool.jobTimeout)

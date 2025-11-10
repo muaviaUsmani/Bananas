@@ -1,0 +1,270 @@
+# Docker Compose - Job-Specialized Mode Configuration
+# Use case: Different resource requirements per job type (CPU vs I/O intensive)
+
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --maxmemory 4gb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # CPU-intensive job workers
+  # Jobs: send_email, generate_report, process_analytics
+  worker-cpu:
+    image: bananas-worker:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      # Job-specialized mode - only process specific job types
+      - WORKER_MODE=job-specialized
+      - WORKER_JOB_TYPES=send_email,generate_report,process_analytics
+      - WORKER_PRIORITIES=high,normal,low  # Process all priorities
+      - WORKER_CONCURRENCY=10              # Lower concurrency for CPU-bound tasks
+      - ENABLE_SCHEDULER=false
+
+      # Redis configuration
+      - REDIS_URL=redis://redis:6379
+
+      # Job configuration
+      - JOB_TIMEOUT=10m                    # Longer timeout for CPU-intensive jobs
+      - MAX_RETRIES=2
+
+      # Logging configuration
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - LOG_CONSOLE_ENABLED=true
+      - LOG_FILE_ENABLED=true
+      - LOG_FILE_PATH=/var/log/bananas/worker-cpu.log
+      - LOG_FILE_MAX_SIZE_MB=100
+      - LOG_FILE_MAX_BACKUPS=5
+
+    volumes:
+      - worker-cpu-logs:/var/log/bananas
+    restart: unless-stopped
+    deploy:
+      replicas: 2  # 2 instances × 10 workers = 20 CPU workers
+      resources:
+        limits:
+          cpus: '4'      # High CPU allocation
+          memory: 2G
+        reservations:
+          cpus: '2'
+          memory: 1G
+      # Deploy on CPU-optimized nodes (if using Swarm with node labels)
+      placement:
+        constraints:
+          - node.labels.workload == cpu-optimized
+
+  # I/O-intensive job workers
+  # Jobs: fetch_data, process_images, upload_files, download_content
+  worker-io:
+    image: bananas-worker:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - WORKER_MODE=job-specialized
+      - WORKER_JOB_TYPES=fetch_data,process_images,upload_files,download_content
+      - WORKER_PRIORITIES=high,normal,low
+      - WORKER_CONCURRENCY=50              # Higher concurrency for I/O-bound tasks
+      - ENABLE_SCHEDULER=false
+
+      - REDIS_URL=redis://redis:6379
+      - JOB_TIMEOUT=5m
+      - MAX_RETRIES=3
+
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - LOG_CONSOLE_ENABLED=true
+      - LOG_FILE_ENABLED=true
+      - LOG_FILE_PATH=/var/log/bananas/worker-io.log
+      - LOG_FILE_MAX_SIZE_MB=100
+      - LOG_FILE_MAX_BACKUPS=5
+
+    volumes:
+      - worker-io-logs:/var/log/bananas
+    restart: unless-stopped
+    deploy:
+      replicas: 3  # 3 instances × 50 workers = 150 I/O workers
+      resources:
+        limits:
+          cpus: '2'      # Lower CPU, more for I/O
+          memory: 4G     # Higher memory for caching
+        reservations:
+          cpus: '1'
+          memory: 2G
+      placement:
+        constraints:
+          - node.labels.workload == io-optimized
+
+  # Database job workers
+  # Jobs: sync_database, run_migrations, backup_data, cleanup_old_records
+  worker-database:
+    image: bananas-worker:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - WORKER_MODE=job-specialized
+      - WORKER_JOB_TYPES=sync_database,run_migrations,backup_data,cleanup_old_records
+      - WORKER_PRIORITIES=high,normal,low
+      - WORKER_CONCURRENCY=5               # Low concurrency to avoid DB overload
+      - ENABLE_SCHEDULER=false
+
+      - REDIS_URL=redis://redis:6379
+      - JOB_TIMEOUT=30m                    # Very long timeout for migrations/backups
+      - MAX_RETRIES=1                      # Minimal retries for DB operations
+
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - LOG_CONSOLE_ENABLED=true
+      - LOG_FILE_ENABLED=true
+      - LOG_FILE_PATH=/var/log/bananas/worker-database.log
+      - LOG_FILE_MAX_SIZE_MB=100
+      - LOG_FILE_MAX_BACKUPS=10            # Keep more logs for DB operations
+
+    volumes:
+      - worker-database-logs:/var/log/bananas
+    restart: unless-stopped
+    deploy:
+      replicas: 1  # Single instance to prevent concurrent DB operations
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+      # Deploy on same network as database
+      placement:
+        constraints:
+          - node.labels.has-db-access == true
+
+  # General purpose workers (catch-all for other job types)
+  # Handles any job type not handled by specialized workers
+  worker-general:
+    image: bananas-worker:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - WORKER_MODE=default                # Default mode processes all job types
+      - WORKER_PRIORITIES=high,normal,low
+      - WORKER_CONCURRENCY=20
+      - ENABLE_SCHEDULER=false
+
+      - REDIS_URL=redis://redis:6379
+      - JOB_TIMEOUT=5m
+      - MAX_RETRIES=3
+
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+      - LOG_CONSOLE_ENABLED=true
+      - LOG_FILE_ENABLED=true
+      - LOG_FILE_PATH=/var/log/bananas/worker-general.log
+      - LOG_FILE_MAX_SIZE_MB=100
+      - LOG_FILE_MAX_BACKUPS=5
+
+    volumes:
+      - worker-general-logs:/var/log/bananas
+    restart: unless-stopped
+    deploy:
+      replicas: 2  # 2 instances × 20 workers = 40 general workers
+      resources:
+        limits:
+          cpus: '2'
+          memory: 2G
+        reservations:
+          cpus: '1'
+          memory: 1G
+
+  # Dedicated scheduler - single instance only
+  scheduler:
+    image: bananas-worker:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      - WORKER_MODE=scheduler-only
+      - SCHEDULER_INTERVAL=1s
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=info
+      - LOG_FORMAT=json
+    restart: unless-stopped
+    deploy:
+      replicas: 1  # MUST be exactly 1
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+
+  # API server for job enqueuing
+  api:
+    image: bananas-api:latest
+    depends_on:
+      redis:
+        condition: service_healthy
+    ports:
+      - "8080:8080"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - API_PORT=8080
+      - LOG_LEVEL=info
+    restart: unless-stopped
+    deploy:
+      replicas: 2  # Load balanced API instances
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+
+volumes:
+  redis-data:
+  worker-cpu-logs:
+  worker-io-logs:
+  worker-database-logs:
+  worker-general-logs:
+
+# Usage:
+# docker-compose -f docker-compose-job-specialized.yml up
+#
+# Scale specific job type workers:
+# docker-compose -f docker-compose-job-specialized.yml up --scale worker-io=5
+# docker-compose -f docker-compose-job-specialized.yml up --scale worker-cpu=3
+#
+# Monitor specific job type workers:
+# docker-compose -f docker-compose-job-specialized.yml logs -f worker-cpu
+# docker-compose -f docker-compose-job-specialized.yml logs -f worker-io
+#
+# Worker allocation:
+# - CPU jobs: 20 workers (low concurrency, high CPU)
+# - I/O jobs: 150 workers (high concurrency, high memory)
+# - Database jobs: 5 workers (very low concurrency, isolated)
+# - General jobs: 40 workers (catch-all for other types)
+# Total: 215 workers
+#
+# Suitable for:
+# - Workloads with diverse resource requirements
+# - Preventing resource contention between job types
+# - Optimizing infrastructure costs (right-size per job type)
+# - Jobs requiring specialized infrastructure (GPUs, databases, etc.)
+#
+# Benefits:
+# - Deploy CPU workers on CPU-optimized instances
+# - Deploy I/O workers on network/storage-optimized instances
+# - Database workers isolated to prevent concurrent mutations
+# - Fine-grained scaling per job type
+# - Better resource utilization and cost optimization
+#
+# Example job types by category:
+# CPU-intensive: ML inference, video encoding, PDF generation, data processing
+# I/O-intensive: File uploads/downloads, API calls, image processing, web scraping
+# Database: Migrations, backups, cleanup, replication, analytics queries
+# General: Notifications, logging, webhooks, simple transformations
