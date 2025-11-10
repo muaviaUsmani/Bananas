@@ -8,9 +8,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/muaviaUsmani/bananas/internal/config"
 	"github.com/muaviaUsmani/bananas/internal/logger"
+	"github.com/muaviaUsmani/bananas/internal/metrics"
 	"github.com/muaviaUsmani/bananas/internal/queue"
 	"github.com/muaviaUsmani/bananas/internal/worker"
 )
@@ -89,6 +91,30 @@ func main() {
 
 	// Start worker pool
 	pool.Start(ctx)
+
+	// Start periodic metrics logging
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				m := metrics.GetMetrics()
+				workerLog.Info("System metrics",
+					"jobs_processed", m.TotalJobsProcessed,
+					"jobs_completed", m.TotalJobsCompleted,
+					"jobs_failed", m.TotalJobsFailed,
+					"avg_duration_ms", m.AvgJobDuration.Milliseconds(),
+					"worker_utilization", fmt.Sprintf("%.1f%%", m.WorkerUtilization),
+					"error_rate", fmt.Sprintf("%.2f%%", m.ErrorRate),
+					"uptime", m.Uptime.String(),
+				)
+			}
+		}
+	}()
 
 	// Wait for shutdown signal
 	sig := <-sigChan

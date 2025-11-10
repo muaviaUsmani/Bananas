@@ -556,8 +556,113 @@ if ml.elastic != nil {
    LOG_ES_FLUSH_INTERVAL=10s  # Less frequent flushes
    ```
 
+## Metrics Collection
+
+Bananas includes an in-memory metrics collection system that tracks system health and performance.
+
+### Available Metrics
+
+The metrics system automatically tracks:
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `TotalJobsProcessed` | Counter | Total number of jobs started (all time) |
+| `TotalJobsCompleted` | Counter | Total number of jobs completed successfully |
+| `TotalJobsFailed` | Counter | Total number of jobs that failed |
+| `JobsByStatus` | Map | Current count of jobs in each status (processing, completed, failed) |
+| `JobsByPriority` | Map | Total jobs by priority (high, normal, low) |
+| `QueueDepths` | Map | Current number of pending jobs in each priority queue |
+| `AvgJobDuration` | Duration | Average execution time across all jobs |
+| `WorkerUtilization` | Percentage | Percentage of workers currently processing jobs |
+| `ErrorRate` | Percentage | Percentage of jobs that failed |
+| `Uptime` | Duration | Time since worker/service started |
+
+### Accessing Metrics
+
+**Programmatic Access:**
+
+```go
+import "github.com/muaviaUsmani/bananas/internal/metrics"
+
+// Get current metrics snapshot
+m := metrics.GetMetrics()
+
+fmt.Printf("Jobs processed: %d\n", m.TotalJobsProcessed)
+fmt.Printf("Worker utilization: %.1f%%\n", m.WorkerUtilization)
+fmt.Printf("Error rate: %.2f%%\n", m.ErrorRate)
+fmt.Printf("Average job duration: %v\n", m.AvgJobDuration)
+```
+
+**Automatic Logging:**
+
+The worker service automatically logs metrics every 30 seconds:
+
+```json
+{
+  "time": "2025-11-09T12:34:56Z",
+  "level": "INFO",
+  "msg": "System metrics",
+  "component": "worker",
+  "jobs_processed": 1523,
+  "jobs_completed": 1489,
+  "jobs_failed": 34,
+  "avg_duration_ms": 245,
+  "worker_utilization": "73.2%",
+  "error_rate": "2.23%",
+  "uptime": "2h15m30s"
+}
+```
+
+### Querying Metrics in Elasticsearch
+
+Find metrics logs:
+
+```json
+{
+  "query": {
+    "term": { "msg": "System metrics" }
+  },
+  "sort": [{ "timestamp": "desc" }]
+}
+```
+
+Visualize metrics trends in Kibana:
+- Create time-series visualizations for job throughput
+- Track error rate over time
+- Monitor worker utilization
+- Set up alerts for high error rates or low throughput
+
+### Metrics API
+
+For programmatic access to metrics:
+
+```go
+// Get metrics collector
+collector := metrics.Default()
+
+// Record custom events (automatically called by worker/executor)
+collector.RecordJobStarted(job.JobPriorityHigh)
+collector.RecordJobCompleted(job.JobPriorityHigh, duration)
+collector.RecordJobFailed(job.JobPriorityLow, duration)
+collector.RecordQueueDepth(job.JobPriorityNormal, 150)
+collector.RecordWorkerActivity(activeWorkers, totalWorkers)
+
+// Get current metrics
+metrics := collector.GetMetrics()
+
+// Reset metrics (useful for testing)
+collector.Reset()
+```
+
+### Performance
+
+- Metrics collection uses atomic operations for counters (thread-safe, <10ns overhead)
+- Map updates are protected by RWMutex (minimal contention)
+- No external dependencies - all in-memory
+- Negligible memory footprint (~1KB for typical workload)
+
 ## Next Steps
 
-- **Metrics & Monitoring**: See [METRICS.md](METRICS.md) for application metrics (coming soon)
 - **Distributed Tracing**: See [TRACING.md](TRACING.md) for request tracing (coming soon)
-- **Alerting**: Configure Kibana alerts based on log patterns
+- **Alerting**: Configure Kibana alerts based on log patterns and metrics
+- **Custom Metrics**: Extend the metrics system for application-specific tracking

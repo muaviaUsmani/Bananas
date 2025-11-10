@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/muaviaUsmani/bananas/internal/job"
 	"github.com/muaviaUsmani/bananas/internal/logger"
+	"github.com/muaviaUsmani/bananas/internal/metrics"
 )
 
 // QueueReader defines the interface for dequeuing jobs from the queue
@@ -17,13 +19,14 @@ type QueueReader interface {
 
 // Pool manages a pool of workers that process jobs from the queue
 type Pool struct {
-	executor    *Executor
-	queue       QueueReader
-	concurrency int
-	jobTimeout  time.Duration
-	priorities  []job.JobPriority
-	wg          sync.WaitGroup
-	stopChan    chan struct{}
+	executor      *Executor
+	queue         QueueReader
+	concurrency   int
+	jobTimeout    time.Duration
+	priorities    []job.JobPriority
+	wg            sync.WaitGroup
+	stopChan      chan struct{}
+	activeWorkers atomic.Int64
 }
 
 // NewPool creates a new worker pool
@@ -127,6 +130,17 @@ func (p *Pool) worker(ctx context.Context, workerID int) {
 
 // executeWithTimeout executes a job with the configured timeout
 func (p *Pool) executeWithTimeout(ctx context.Context, workerID int, j *job.Job) {
+	// Mark worker as active
+	active := p.activeWorkers.Add(1)
+	defer func() {
+		active = p.activeWorkers.Add(-1)
+		// Update metrics with current worker utilization
+		metrics.Default().RecordWorkerActivity(active, int64(p.concurrency))
+	}()
+
+	// Update metrics with current worker utilization
+	metrics.Default().RecordWorkerActivity(active, int64(p.concurrency))
+
 	// Recover from panics during job execution
 	defer func() {
 		if r := recover(); r != nil {

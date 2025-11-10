@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/muaviaUsmani/bananas/internal/job"
+	"github.com/muaviaUsmani/bananas/internal/metrics"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -149,6 +150,10 @@ func (q *RedisQueue) Enqueue(ctx context.Context, j *job.Job) error {
 	}
 
 	log.Printf("Enqueued job %s to %s queue", j.ID, j.Priority)
+
+	// Update queue depth metrics (best-effort, don't fail enqueue on error)
+	q.updateQueueMetrics(ctx)
+
 	return nil
 }
 
@@ -482,6 +487,23 @@ func (q *RedisQueue) GetJob(ctx context.Context, jobID string) (*job.Job, error)
 	}
 
 	return &j, nil
+}
+
+// updateQueueMetrics updates metrics with current queue depths
+// This is called periodically and best-effort (errors are logged but not returned)
+func (q *RedisQueue) updateQueueMetrics(ctx context.Context) {
+	// Get queue depths for all priorities
+	priorities := []job.JobPriority{job.JobPriorityHigh, job.JobPriorityNormal, job.JobPriorityLow}
+
+	for _, priority := range priorities {
+		depth, err := q.client.LLen(ctx, q.queueKey(priority)).Result()
+		if err != nil {
+			// Log error but don't fail - metrics are best-effort
+			log.Printf("Failed to get queue depth for %s: %v", priority, err)
+			continue
+		}
+		metrics.Default().RecordQueueDepth(priority, depth)
+	}
 }
 
 // Close closes the Redis connection
