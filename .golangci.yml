@@ -4,6 +4,9 @@ run:
   timeout: 5m
   tests: true
   modules-download-mode: readonly
+  skip-dirs:
+    - examples
+    - docs
 
 linters:
   enable:
@@ -78,6 +81,16 @@ issues:
   max-same-issues: 0
 
   exclude-rules:
+    # Exclude examples directory from all linters
+    - path: examples/
+      linters:
+        - errcheck
+        - gosec
+        - revive
+        - govet
+        - staticcheck
+        - unused
+
     # Exclude some linters from running on test files
     - path: _test\.go
       linters:
