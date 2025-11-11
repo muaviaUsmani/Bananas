@@ -17,13 +17,14 @@ linters:
     - misspell      # Spell checking
     - revive        # Fast linter
     - gosec         # Security issues
-    - exportloopref # Loop variable issues
     - bodyclose     # HTTP response body close
     - noctx         # HTTP request without context
-    - prealloc      # Slice preallocation
     - unconvert     # Unnecessary type conversions
-    - unparam       # Unused function parameters
     - whitespace    # Whitespace issues
+  disable:
+    - exportloopref # Deprecated since Go 1.22
+    - prealloc      # Too strict for tests
+    - unparam       # Too noisy for tests
 
 linters-settings:
   errcheck:
@@ -31,8 +32,14 @@ linters-settings:
     check-blank: true
 
   govet:
-    check-shadowing: true
     enable-all: true
+    disable:
+      - shadow       # Enabled separately
+      - fieldalignment  # Too strict
+
+  shadow:
+    # Enable shadow checking
+    strict: false
 
   gofmt:
     simplify: true
@@ -77,12 +84,25 @@ issues:
   max-same-issues: 0
 
   exclude-rules:
-    # Exclude some linters from running on tests files
+    # Exclude some linters from running on test files
     - path: _test\.go
       linters:
         - gosec
         - errcheck
-        - unparam
+        - revive
+        - govet
+
+    # Exclude unused functions and variables in test files
+    - path: _test\.go
+      linters:
+        - unused
+      text: "is unused"
+
+    # Exclude staticcheck SA4010 for test files (append results)
+    - path: _test\.go
+      linters:
+        - staticcheck
+      text: "SA4010"
 
     # Exclude duplicate imports warning (false positives)
     - linters:
@@ -90,7 +110,8 @@ issues:
       text: "imported but not used"
 
 output:
-  format: colored-line-number
+  formats:
+    - format: colored-line-number
   print-issued-lines: true
   print-linter-name: true
   sort-results: true

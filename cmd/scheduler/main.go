@@ -1,10 +1,11 @@
+// Package main provides the Bananas scheduler daemon.
 package main
 
 import (
 	"context"
 	"fmt"
 	"net/http"
-	_ "net/http/pprof"
+	_ "net/http/pprof" // #nosec G108 - pprof is intentionally exposed for debugging
 	"os"
 	"os/signal"
 	"syscall"
