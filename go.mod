@@ -2,7 +2,7 @@ module github.com/muaviaUsmani/bananas
 
 go 1.23
 
-toolchain go1.24.7
+toolchain go1.24.9
 
 require (
 	github.com/alicebob/miniredis/v2 v2.35.0
