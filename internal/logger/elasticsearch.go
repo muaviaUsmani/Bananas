@@ -99,7 +99,6 @@ func (el *ElasticsearchLogger) configure() error {
 		// In production, you'd decode the base64 data
 		el.bulkURL = fmt.Sprintf("https://%s.es.us-east-1.aws.found.io:9243/_bulk", parts[0])
 		el.apiKey = cfg.APIKey
-
 	} else {
 		// Self-managed mode: use addresses
 		if len(cfg.Addresses) == 0 {

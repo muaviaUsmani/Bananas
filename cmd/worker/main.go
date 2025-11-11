@@ -1,3 +1,4 @@
+// Package main provides the Bananas worker service for processing background jobs.
 package main
 
 import (
