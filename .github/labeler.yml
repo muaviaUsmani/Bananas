@@ -1,0 +1,41 @@
+# Auto-labeling configuration for PRs
+
+go:
+  - changed-files:
+    - any-glob-to-any-file: ['**/*.go', 'go.mod', 'go.sum']
+
+python-sdk:
+  - changed-files:
+    - any-glob-to-any-file: 'sdk/python/**/*'
+
+typescript-sdk:
+  - changed-files:
+    - any-glob-to-any-file: 'sdk/typescript/**/*'
+
+documentation:
+  - changed-files:
+    - any-glob-to-any-file: ['docs/**/*', '**/*.md']
+
+ci/cd:
+  - changed-files:
+    - any-glob-to-any-file: ['.github/**/*', 'docker-compose.yml', 'Dockerfile*']
+
+tests:
+  - changed-files:
+    - any-glob-to-any-file: ['**/*_test.go', 'sdk/python/tests/**/*', 'sdk/typescript/test/**/*']
+
+dependencies:
+  - changed-files:
+    - any-glob-to-any-file: ['go.mod', 'go.sum', 'sdk/python/pyproject.toml', 'sdk/typescript/package.json', 'sdk/typescript/package-lock.json']
+
+docker:
+  - changed-files:
+    - any-glob-to-any-file: ['Dockerfile*', 'docker-compose.yml', '.dockerignore']
+
+examples:
+  - changed-files:
+    - any-glob-to-any-file: ['examples/**/*', 'sdk/python/examples/**/*']
+
+security:
+  - changed-files:
+    - any-glob-to-any-file: ['**/security/**/*', '.github/workflows/codeql.yml']

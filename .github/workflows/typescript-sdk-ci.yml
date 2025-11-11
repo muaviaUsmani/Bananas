@@ -1,0 +1,142 @@
+name: TypeScript SDK CI
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'sdk/typescript/**'
+      - '.github/workflows/typescript-sdk-ci.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'sdk/typescript/**'
+      - '.github/workflows/typescript-sdk-ci.yml'
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node-version: ['20.x', '22.x']
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'npm'
+        cache-dependency-path: 'sdk/typescript/package-lock.json'
+
+    - name: Install dependencies
+      working-directory: sdk/typescript
+      run: npm ci
+
+    - name: Build
+      working-directory: sdk/typescript
+      run: npm run build
+
+    - name: Run tests with coverage
+      working-directory: sdk/typescript
+      run: npm run test:coverage
+
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v4
+      with:
+        files: ./sdk/typescript/coverage/coverage-final.json
+        flags: typescript
+        name: typescript-${{ matrix.node-version }}
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      continue-on-error: true
+
+  lint:
+    name: Lint and Type Check
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: 'sdk/typescript/package-lock.json'
+
+    - name: Install dependencies
+      working-directory: sdk/typescript
+      run: npm ci
+
+    - name: Type check
+      working-directory: sdk/typescript
+      run: npx tsc --noEmit
+
+    - name: Lint
+      working-directory: sdk/typescript
+      run: npm run lint
+
+    - name: Check formatting
+      working-directory: sdk/typescript
+      run: npx prettier --check "src/**/*.ts" "test/**/*.ts"
+
+  build:
+    name: Build Package
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: 'sdk/typescript/package-lock.json'
+
+    - name: Install dependencies
+      working-directory: sdk/typescript
+      run: npm ci
+
+    - name: Build
+      working-directory: sdk/typescript
+      run: npm run build
+
+    - name: Verify package can be packed
+      working-directory: sdk/typescript
+      run: npm pack
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: typescript-package
+        path: sdk/typescript/*.tgz
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20.x'
+        cache: 'npm'
+        cache-dependency-path: 'sdk/typescript/package-lock.json'
+
+    - name: Install dependencies
+      working-directory: sdk/typescript
+      run: npm ci
+
+    - name: Run npm audit
+      working-directory: sdk/typescript
+      run: npm audit --audit-level=moderate
+      continue-on-error: true

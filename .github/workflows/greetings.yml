@@ -1,0 +1,46 @@
+name: Greetings
+
+on:
+  issues:
+    types: [opened]
+  pull_request_target:
+    types: [opened]
+
+jobs:
+  greeting:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+
+    steps:
+    - uses: actions/first-interaction@v1
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        issue-message: |
+          👋 Thanks for opening your first issue in Bananas!
+
+          We appreciate you taking the time to contribute. A maintainer will review your issue soon.
+
+          In the meantime:
+          - Check our [documentation](https://github.com/muaviaUsmani/bananas/tree/main/docs) for common questions
+          - Review our [contributing guidelines](https://github.com/muaviaUsmani/bananas/blob/main/CONTRIBUTING.md) if you plan to submit a PR
+          - Join our [discussions](https://github.com/muaviaUsmani/bananas/discussions) to connect with the community
+
+        pr-message: |
+          🎉 Thanks for opening your first pull request in Bananas!
+
+          We're excited to review your contribution! Here's what happens next:
+
+          1. **Automated checks** will run on your PR
+          2. A **maintainer will review** your code
+          3. You may be asked to make some changes
+          4. Once approved, your PR will be merged!
+
+          **Tips for a smooth review:**
+          - Make sure all CI checks pass
+          - Respond to review comments
+          - Keep your PR focused on a single change
+          - Update documentation if needed
+
+          Thank you for contributing to Bananas! 🍌
