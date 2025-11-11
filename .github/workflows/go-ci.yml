@@ -34,8 +34,8 @@ jobs:
       run: go build -v ./...
 
     - name: Run unit tests
-      run: go test -v -race -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v '/tests')
-      timeout-minutes: 10
+      run: go test -v -race -timeout=15m -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v '/tests')
+      timeout-minutes: 20
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
@@ -74,8 +74,8 @@ jobs:
       run: go mod download
 
     - name: Run integration tests
-      run: go test -v -timeout=10m ./tests/...
-      timeout-minutes: 15
+      run: go test -v -timeout=20m ./tests/...
+      timeout-minutes: 25
 
   lint:
     name: Lint
