@@ -607,8 +607,16 @@ func (q *RedisQueue) MoveScheduledToReady(ctx context.Context) (int, error) {
 			routingKey = "default"
 		}
 
-		// Enqueue to appropriate routed priority queue
-		pipe.LPush(ctx, q.routeQueueKey(routingKey, update.job.Priority), update.job.ID)
+		// Enqueue to appropriate queue
+		// Use regular priority queue for "default" routing key (backward compatibility)
+		// Use routing-aware queue for other routing keys
+		var queueKey string
+		if routingKey == "default" {
+			queueKey = q.queueKey(update.job.Priority)
+		} else {
+			queueKey = q.routeQueueKey(routingKey, update.job.Priority)
+		}
+		pipe.LPush(ctx, queueKey, update.job.ID)
 
 		// Remove from scheduled set
 		pipe.ZRem(ctx, q.getScheduledSetKey(), update.job.ID)
