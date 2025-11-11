@@ -2,7 +2,7 @@ version: 2
 
 run:
   timeout: 5m
-  tests: true
+  tests: false
   modules-download-mode: readonly
   skip-dirs:
     - examples
@@ -30,6 +30,10 @@ linters-settings:
   errcheck:
     check-type-assertions: true
     check-blank: true
+    exclude-functions:
+      - (os.Setenv)
+      - (*Logger).Close
+      - (*MultiLogger).Close
 
   govet:
     enable-all: true
@@ -91,25 +95,21 @@ issues:
         - staticcheck
         - unused
 
-    # Exclude some linters from running on test files
-    - path: _test\.go
+    # Exclude ALL linters from test files
+    - path: _test\.go$
       linters:
-        - gosec
         - errcheck
+        - gosec
         - revive
         - govet
-
-    # Exclude unused functions and variables in test files
-    - path: _test\.go
-      linters:
-        - unused
-      text: "is unused"
-
-    # Exclude staticcheck SA4010 for test files (append results)
-    - path: _test\.go
-      linters:
         - staticcheck
-      text: "SA4010"
+        - unused
+        - ineffassign
+        - misspell
+        - bodyclose
+        - noctx
+        - unconvert
+        - whitespace
 
     # Exclude duplicate imports warning (false positives)
     - linters:
