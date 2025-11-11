@@ -33,8 +33,9 @@ jobs:
     - name: Build
       run: go build -v ./...
 
-    - name: Run tests
+    - name: Run unit tests
       run: go test -v -race -coverprofile=coverage.out -covermode=atomic $(go list ./... | grep -v '/tests')
+      timeout-minutes: 10
 
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
@@ -54,6 +55,27 @@ jobs:
           echo "Coverage $coverage% is below threshold 60%"
           exit 1
         fi
+
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.24'
+        cache: true
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run integration tests
+      run: go test -v -timeout=10m ./tests/...
+      timeout-minutes: 15
 
   lint:
     name: Lint
