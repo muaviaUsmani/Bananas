@@ -81,7 +81,8 @@ func (bw *bufferedWriter) flusher() {
 	for {
 		select {
 		case buf := <-bw.buffer:
-			bw.writer.Write(buf)
+			// Ignore write errors in background flusher - nothing we can do
+			_, _ = bw.writer.Write(buf)
 		case <-ticker.C:
 			// Drain buffer on tick
 			bw.drain()
@@ -94,7 +95,8 @@ func (bw *bufferedWriter) drain() {
 	for {
 		select {
 		case buf := <-bw.buffer:
-			bw.writer.Write(buf)
+			// Ignore write errors during drain - nothing we can do
+			_, _ = bw.writer.Write(buf)
 		default:
 			return
 		}
@@ -183,8 +185,8 @@ func (cl *ConsoleLogger) log(level LogLevel, msg string, component Component, so
 		record.AddAttrs(slog.Any(k, v))
 	}
 
-	// Handle the record
-	cl.handler.Handle(nil, record)
+	// Handle the record - ignore errors as there's no good way to handle them in logging
+	_ = cl.handler.Handle(nil, record)
 }
 
 // Close flushes and closes the console logger

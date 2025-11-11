@@ -179,4 +179,3 @@ func TestExecuteJob_ContextCancellation(t *testing.T) {
 		t.Error("expected Fail to be called on queue")
 	}
 }
-

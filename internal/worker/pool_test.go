@@ -377,4 +377,3 @@ func TestPool_PriorityOrdering(t *testing.T) {
 		t.Errorf("expected third job to be low priority, got %s", executed[2])
 	}
 }
-

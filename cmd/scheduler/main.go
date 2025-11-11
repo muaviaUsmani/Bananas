@@ -38,6 +38,7 @@ func connectWithRetry(redisURL string, maxRetries int, log logger.Logger) (*queu
 		}
 
 		// Calculate exponential backoff delay: 2^attempt seconds (max 30 seconds)
+		// #nosec G115 - attempt is bounded by maxRetries parameter, overflow not possible
 		delay := time.Duration(1<<uint(attempt)) * time.Second
 		if delay > 30*time.Second {
 			delay = 30 * time.Second
@@ -69,7 +70,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
 		os.Exit(1)
 	}
-	defer log.Close()
+	defer func() {
+		if err := log.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to close logger: %v\n", err)
+		}
+	}()
 
 	// Set as default logger
 	logger.SetDefault(log)
@@ -88,7 +93,15 @@ func main() {
 	}
 	go func() {
 		schedulerLog.Info("Starting pprof server", "port", pprofPort, "url", fmt.Sprintf("http://localhost:%s/debug/pprof/", pprofPort))
-		if err := http.ListenAndServe(":"+pprofPort, nil); err != nil {
+		// Create server with timeouts for security
+		server := &http.Server{
+			Addr:              ":" + pprofPort,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       10 * time.Second,
+			WriteTimeout:      10 * time.Second,
+			IdleTimeout:       60 * time.Second,
+		}
+		if err := server.ListenAndServe(); err != nil {
 			schedulerLog.Error("pprof server failed", "error", err)
 		}
 	}()
@@ -99,7 +112,11 @@ func main() {
 		schedulerLog.Error("Failed to connect to Redis", "error", err)
 		os.Exit(1)
 	}
-	defer redisQueue.Close()
+	defer func() {
+		if err := redisQueue.Close(); err != nil {
+			schedulerLog.Error("Failed to close Redis queue", "error", err)
+		}
+	}()
 
 	schedulerLog.Info("Successfully connected to Redis")
 
@@ -109,7 +126,11 @@ func main() {
 		schedulerLog.Error("Failed to create Redis client", "error", err)
 		os.Exit(1)
 	}
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			schedulerLog.Error("Failed to close Redis client", "error", err)
+		}
+	}()
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())

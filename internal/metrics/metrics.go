@@ -22,30 +22,30 @@ type Collector struct {
 	totalJobsFailed    atomic.Int64
 
 	// Job tracking by status and priority (protected by mutex)
-	mu                sync.RWMutex
-	jobsByStatus      map[job.JobStatus]int64
-	jobsByPriority    map[job.JobPriority]int64
-	queueDepths       map[job.JobPriority]int64
-	totalDuration     time.Duration
-	startTime         time.Time
-	activeWorkers     int64
-	totalWorkers      int64
-	errorCount        int64
-	operationCount    int64
+	mu             sync.RWMutex
+	jobsByStatus   map[job.JobStatus]int64
+	jobsByPriority map[job.JobPriority]int64
+	queueDepths    map[job.JobPriority]int64
+	totalDuration  time.Duration
+	startTime      time.Time
+	activeWorkers  int64
+	totalWorkers   int64
+	errorCount     int64
+	operationCount int64
 }
 
 // Metrics represents a snapshot of current system metrics
 type Metrics struct {
-	TotalJobsProcessed int64                      `json:"total_jobs_processed"`
-	TotalJobsCompleted int64                      `json:"total_jobs_completed"`
-	TotalJobsFailed    int64                      `json:"total_jobs_failed"`
-	JobsByStatus       map[job.JobStatus]int64    `json:"jobs_by_status"`
-	JobsByPriority     map[job.JobPriority]int64  `json:"jobs_by_priority"`
-	QueueDepths        map[job.JobPriority]int64  `json:"queue_depths"`
-	AvgJobDuration     time.Duration              `json:"avg_job_duration"`
-	WorkerUtilization  float64                    `json:"worker_utilization"`
-	ErrorRate          float64                    `json:"error_rate"`
-	Uptime             time.Duration              `json:"uptime"`
+	TotalJobsProcessed int64                     `json:"total_jobs_processed"`
+	TotalJobsCompleted int64                     `json:"total_jobs_completed"`
+	TotalJobsFailed    int64                     `json:"total_jobs_failed"`
+	JobsByStatus       map[job.JobStatus]int64   `json:"jobs_by_status"`
+	JobsByPriority     map[job.JobPriority]int64 `json:"jobs_by_priority"`
+	QueueDepths        map[job.JobPriority]int64 `json:"queue_depths"`
+	AvgJobDuration     time.Duration             `json:"avg_job_duration"`
+	WorkerUtilization  float64                   `json:"worker_utilization"`
+	ErrorRate          float64                   `json:"error_rate"`
+	Uptime             time.Duration             `json:"uptime"`
 }
 
 // Default returns the global metrics collector instance

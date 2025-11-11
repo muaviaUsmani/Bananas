@@ -156,8 +156,8 @@ func (cs *CronScheduler) executeSchedule(ctx context.Context, schedule *Schedule
 			"job_name", schedule.Job,
 			"error", err)
 
-		// Update state with error
-		cs.updateState(ctx, schedule.ID, &ScheduleState{
+		// Update state with error - ignore update errors as they're not critical
+		_ = cs.updateState(ctx, schedule.ID, &ScheduleState{
 			ID:        schedule.ID,
 			LastRun:   now,
 			LastError: err.Error(),
@@ -181,9 +181,9 @@ func (cs *CronScheduler) executeSchedule(ctx context.Context, schedule *Schedule
 		nextRun = time.Time{} // Zero time
 	}
 
-	// Update state
+	// Update state - ignore update errors as they're not critical
 	runCount := cs.incrementRunCount(ctx, schedule.ID)
-	cs.updateState(ctx, schedule.ID, &ScheduleState{
+	_ = cs.updateState(ctx, schedule.ID, &ScheduleState{
 		ID:          schedule.ID,
 		LastRun:     now,
 		NextRun:     nextRun,
@@ -245,8 +245,9 @@ func (cs *CronScheduler) getState(ctx context.Context, scheduleID string) (*Sche
 
 	if runCount, exists := result["run_count"]; exists && runCount != "" {
 		var count int64
-		fmt.Sscanf(runCount, "%d", &count)
-		state.RunCount = count
+		if _, err := fmt.Sscanf(runCount, "%d", &count); err == nil {
+			state.RunCount = count
+		}
 	}
 
 	return state, nil

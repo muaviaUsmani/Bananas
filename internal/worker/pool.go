@@ -14,6 +14,16 @@ import (
 	"github.com/muaviaUsmani/bananas/internal/metrics"
 )
 
+// contextKey is a custom type for context keys to avoid collisions
+type contextKey string
+
+const (
+	// contextKeyWorkerID is the context key for worker ID
+	contextKeyWorkerID contextKey = "worker_id"
+	// contextKeyJobID is the context key for job ID
+	contextKeyJobID contextKey = "job_id"
+)
+
 // QueueReader defines the interface for dequeuing jobs from the queue
 type QueueReader interface {
 	Dequeue(ctx context.Context, priorities []job.JobPriority) (*job.Job, error)
@@ -118,13 +128,13 @@ func (p *Pool) worker(ctx context.Context, workerID int) {
 	}()
 
 	// Create worker-specific context with worker_id
-	workerCtx := context.WithValue(ctx, "worker_id", fmt.Sprintf("worker-%d", workerID))
+	workerCtx := context.WithValue(ctx, contextKeyWorkerID, fmt.Sprintf("worker-%d", workerID))
 
 	logger.Info("Worker started", "worker_id", workerID)
 
 	// Track consecutive Redis failures for exponential backoff
 	consecutiveFailures := 0
-	currentBackoff := time.Second
+	var currentBackoff time.Duration
 
 	for {
 		select {
@@ -178,7 +188,6 @@ func (p *Pool) worker(ctx context.Context, workerID int) {
 			if consecutiveFailures > 0 {
 				logger.Info("Redis connection recovered", "worker_id", workerID, "after_failures", consecutiveFailures)
 				consecutiveFailures = 0
-				currentBackoff = time.Second
 			}
 
 			// No job available (all queues empty after timeout)
@@ -225,7 +234,7 @@ func (p *Pool) executeWithTimeout(ctx context.Context, workerID int, j *job.Job)
 	metrics.Default().RecordWorkerActivity(active, int64(p.workerConfig.Concurrency))
 
 	// Add job_id to context
-	jobCtx := context.WithValue(ctx, "job_id", j.ID)
+	jobCtx := context.WithValue(ctx, contextKeyJobID, j.ID)
 
 	// Create context with timeout for job execution
 	jobCtx, cancel := context.WithTimeout(jobCtx, p.jobTimeout)
@@ -273,4 +282,3 @@ func (p *Pool) executeWithTimeout(ctx context.Context, workerID int, j *job.Job)
 		jobLogger.InfoContext(jobCtx, "Job completed", "worker_id", workerID, "job_id", j.ID)
 	}
 }
-

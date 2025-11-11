@@ -145,4 +145,3 @@ func TestRegistry_MultipleHandlers(t *testing.T) {
 		}
 	}
 }
-

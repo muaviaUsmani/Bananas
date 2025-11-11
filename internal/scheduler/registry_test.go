@@ -115,7 +115,7 @@ func TestRegister_InvalidCron(t *testing.T) {
 		cron string
 	}{
 		{"empty", ""},
-		{"invalid format", "0 * * *"}, // Only 4 fields
+		{"invalid format", "0 * * *"},   // Only 4 fields
 		{"invalid field", "60 * * * *"}, // Minute 60 doesn't exist
 		{"garbage", "not a cron expression"},
 	}

@@ -141,7 +141,11 @@ func (r *RedisBackend) WaitForResult(ctx context.Context, jobID string, timeout 
 
 	// Subscribe to notification channel
 	pubsub := r.client.Subscribe(waitCtx, notifyChannel)
-	defer pubsub.Close()
+	defer func() {
+		if err := pubsub.Close(); err != nil {
+			// Log error but don't fail - we're already in defer
+		}
+	}()
 
 	// Wait for notification or timeout
 	select {

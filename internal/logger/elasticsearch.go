@@ -2,6 +2,7 @@ package logger
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,20 +21,20 @@ import (
 // - Support for self-managed and cloud deployments
 // - <1μs overhead per log (async)
 type ElasticsearchLogger struct {
-	config       *Config
-	client       *http.Client
-	bulkURL      string
-	apiKey       string
-	buffer       chan *LogEntry
-	batchBuf     []*LogEntry
-	closeChan    chan struct{}
-	wg           sync.WaitGroup
+	config    *Config
+	client    *http.Client
+	bulkURL   string
+	apiKey    string
+	buffer    chan *LogEntry
+	batchBuf  []*LogEntry
+	closeChan chan struct{}
+	wg        sync.WaitGroup
 
 	// Circuit breaker state
-	cbState      atomic.Value // "closed", "open", "half-open"
-	cbFailures   atomic.Int32
-	cbLastFail   atomic.Value // time.Time
-	cbMutex      sync.Mutex
+	cbState    atomic.Value // "closed", "open", "half-open"
+	cbFailures atomic.Int32
+	cbLastFail atomic.Value // time.Time
+	cbMutex    sync.Mutex
 }
 
 // circuitState represents the circuit breaker state
@@ -210,12 +211,18 @@ func (el *ElasticsearchLogger) flushBulk() {
 				"_index": indexName,
 			},
 		}
-		actionJSON, _ := json.Marshal(action)
+		actionJSON, err := json.Marshal(action)
+		if err != nil {
+			continue // Skip this entry if marshaling fails
+		}
 		buf.Write(actionJSON)
 		buf.WriteByte('\n')
 
 		// Document line
-		docJSON, _ := json.Marshal(entry)
+		docJSON, err := json.Marshal(entry)
+		if err != nil {
+			continue // Skip this entry if marshaling fails
+		}
 		buf.Write(docJSON)
 		buf.WriteByte('\n')
 	}
@@ -244,7 +251,7 @@ func (el *ElasticsearchLogger) sendBulkRequest(body io.Reader) error {
 			backoff *= 2 // Exponential backoff
 		}
 
-		req, err := http.NewRequest("POST", el.bulkURL, body)
+		req, err := http.NewRequestWithContext(context.Background(), "POST", el.bulkURL, body)
 		if err != nil {
 			return fmt.Errorf("failed to create request: %w", err)
 		}
@@ -273,7 +280,10 @@ func (el *ElasticsearchLogger) sendBulkRequest(body io.Reader) error {
 		}
 
 		// Read error response
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			respBody = []byte("failed to read response body")
+		}
 		if attempt == cfg.MaxRetries {
 			return fmt.Errorf("bulk request failed with status %d: %s", resp.StatusCode, string(respBody))
 		}
@@ -328,7 +338,7 @@ func (el *ElasticsearchLogger) recordFailure() {
 		el.cbState.Store(circuitOpen)
 		el.cbFailures.Store(0)
 		el.cbMutex.Unlock()
-	} else if failures >= int32(el.config.Elasticsearch.FailureThreshold) {
+	} else if int(failures) >= el.config.Elasticsearch.FailureThreshold {
 		// Too many failures, open circuit
 		el.cbMutex.Lock()
 		el.cbState.Store(circuitOpen)

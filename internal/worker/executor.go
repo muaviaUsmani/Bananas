@@ -138,4 +138,3 @@ func (e *Executor) storeResult(ctx context.Context, jobID string, status job.Job
 		log.Printf("Failed to store result for job %s: %v", jobID, err)
 	}
 }
-

@@ -195,4 +195,3 @@ func loadLoggingConfig() *logger.Config {
 
 	return cfg
 }
-

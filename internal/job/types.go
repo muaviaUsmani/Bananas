@@ -72,13 +72,13 @@ type Job struct {
 //	job := NewJob("resize_image", payload, PriorityHigh)
 func NewJob(name string, payload []byte, priority JobPriority, description ...string) *Job {
 	now := time.Now()
-	
+
 	// Extract optional description (take first if provided)
 	var desc string
 	if len(description) > 0 {
 		desc = description[0]
 	}
-	
+
 	return &Job{
 		ID:          uuid.New().String(),
 		Name:        name,
@@ -99,4 +99,3 @@ func (j *Job) UpdateStatus(status JobStatus) {
 	j.Status = status
 	j.UpdatedAt = time.Now()
 }
-
