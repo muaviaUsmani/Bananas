@@ -35,15 +35,18 @@ jobs:
 
     - name: Run unit tests
       run: |
-        PACKAGES=$(go list ./... | grep -v '/tests' | grep -v '/examples')
-        echo "Testing packages: $PACKAGES"
-        go test -v -timeout=15m -coverprofile=coverage.out -covermode=atomic $PACKAGES
+        echo "Running unit tests with coverage..."
+        go test -v -timeout=15m -coverprofile=coverage.out -covermode=atomic \
+          ./internal/... \
+          ./pkg/...
       timeout-minutes: 20
 
     - name: Run unit tests with race detector
       run: |
-        PACKAGES=$(go list ./... | grep -v '/tests' | grep -v '/examples')
-        go test -v -race -timeout=15m $PACKAGES
+        echo "Running unit tests with race detector..."
+        go test -v -race -timeout=15m \
+          ./internal/... \
+          ./pkg/...
       timeout-minutes: 20
       if: matrix.go-version == '1.24'
 
@@ -86,7 +89,7 @@ jobs:
     - name: Run integration tests
       run: |
         echo "Running integration tests with 20m timeout..."
-        go test -v -timeout=20m -run='^Test' ./tests/...
+        go test -v -timeout=20m ./tests/...
       timeout-minutes: 25
 
   lint:
