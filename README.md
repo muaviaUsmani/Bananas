@@ -21,13 +21,27 @@ Bananas is a lightweight, scalable distributed task queue system designed to han
 
 ## 📖 Documentation
 
-- **[Integration Guide](./INTEGRATION_GUIDE.md)** - Complete guide for integrating Bananas into your projects
-- **[Task Routing Guide](./docs/TASK_ROUTING_USAGE.md)** - Route jobs to specific worker pools (GPU, email, regions)
-- **[Architecture & Components](./README.md#architecture)** - System design and component overview
-- **[API Documentation](./cmd/README.md)** - Service entry points (API, Worker, Scheduler)
-- **[Internal Packages](./internal/README.md)** - Core packages (Config, Job, Queue, Worker)
-- **[Client SDK](./pkg/README.md)** - Public client library documentation
-- **[Tests](./tests/README.md)** - Integration test documentation
+### Getting Started
+
+- **[Integration Guide](./INTEGRATION_GUIDE.md)** - Complete integration patterns and examples
+- **[Contributing Guide](./CONTRIBUTING.md)** - Developer contribution workflow
+
+### Core Concepts
+
+- **[Architecture](./docs/ARCHITECTURE.md)** - System architecture and design decisions
+- **[API Reference](./docs/API_REFERENCE.md)** - Complete API documentation
+- **[Task Routing](./docs/TASK_ROUTING_USAGE.md)** - Route jobs to specialized worker pools
+- **[Periodic Tasks](./docs/PERIODIC_TASKS.md)** - Cron-based scheduled jobs
+
+### Operations
+
+- **[Deployment Guide](./docs/DEPLOYMENT.md)** - Production deployment patterns (Docker, Kubernetes, Systemd)
+- **[Troubleshooting](./docs/TROUBLESHOOTING.md)** - Common issues and solutions
+- **[Performance](./docs/PERFORMANCE.md)** - Benchmarks and performance tuning
+
+### Complete Documentation Index
+
+- **[Documentation Index](./docs/README.md)** - Complete documentation navigation by role and topic
 
 **New to Bananas?** Start with the [Integration Guide](./INTEGRATION_GUIDE.md) to learn how to add Bananas to your existing infrastructure.
 
