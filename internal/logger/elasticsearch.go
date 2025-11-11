@@ -109,10 +109,7 @@ func (el *ElasticsearchLogger) configure() error {
 		baseURL := cfg.Addresses[0]
 		el.bulkURL = fmt.Sprintf("%s/_bulk", baseURL)
 
-		// If username/password provided, set up basic auth
-		if cfg.Username != "" && cfg.Password != "" {
-			// Will add Authorization header in requests
-		}
+		// Basic auth is configured in sendBulkRequest() if username/password provided
 	}
 
 	return nil
