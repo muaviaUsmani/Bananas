@@ -73,13 +73,13 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.22'
+        go-version: '1.23'
 
     - name: Extract and validate Go examples
       run: |
         echo "Checking for Go code blocks in documentation..."
         # This is a placeholder - in practice, you'd extract code blocks and test them
-        grep -r "```go" docs/ || echo "No Go examples found"
+        grep -r "\`\`\`go" docs/ || echo "No Go examples found"
 
     - name: Set up Python
       uses: actions/setup-python@v5
@@ -89,7 +89,7 @@ jobs:
     - name: Validate Python examples
       run: |
         echo "Checking for Python code blocks in documentation..."
-        grep -r "```python" docs/ || echo "No Python examples found"
+        grep -r "\`\`\`python" docs/ || echo "No Python examples found"
 
   docs-build:
     name: Build Documentation
