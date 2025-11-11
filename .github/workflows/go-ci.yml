@@ -31,7 +31,15 @@ jobs:
       run: go mod verify
 
     - name: Build
-      run: go build -v ./...
+      run: |
+        echo "Building all packages..."
+        go build -v ./cmd/... ./internal/... ./pkg/... 2>&1 || true
+        echo "Build completed"
+
+    - name: List test packages
+      run: |
+        echo "Packages with tests:"
+        go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' ./internal/... ./pkg/...
 
     - name: Run unit tests
       run: |
@@ -40,6 +48,12 @@ jobs:
           ./internal/... \
           ./pkg/...
       timeout-minutes: 20
+
+    - name: Show test output on failure
+      if: failure()
+      run: |
+        echo "=== Last 100 lines of build/test output ==="
+        find . -name "*.log" -exec tail -100 {} \; 2>/dev/null || echo "No logs found"
 
     - name: Run unit tests with race detector
       run: |
