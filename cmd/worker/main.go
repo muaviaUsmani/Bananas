@@ -163,4 +163,3 @@ func main() {
 
 	workerLog.Info("Worker shut down successfully")
 }
-

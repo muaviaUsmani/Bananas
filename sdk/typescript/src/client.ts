@@ -2,10 +2,10 @@
  * Bananas client for job submission and management.
  */
 
-import { ConnectionError } from './errors';
-import { createJob } from './models';
-import { RedisQueue } from './queue';
-import { RedisResultBackend } from './resultBackend';
+import { ConnectionError } from "./errors";
+import { createJob } from "./models";
+import { RedisQueue } from "./queue";
+import { RedisResultBackend } from "./resultBackend";
 import {
   ClientOptions,
   Job,
@@ -14,7 +14,7 @@ import {
   SubmitAndWaitOptions,
   SubmitJobOptions,
   SubmitScheduledJobOptions,
-} from './types';
+} from "./types";
 
 /**
  * Bananas job queue client.
@@ -46,7 +46,7 @@ export class Client {
       redisUrl,
       successTTL = 60 * 60 * 1000, // 1 hour
       failureTTL = 24 * 60 * 60 * 1000, // 24 hours
-      keyPrefix = 'bananas',
+      keyPrefix = "bananas",
     } = options;
 
     try {
@@ -55,7 +55,7 @@ export class Client {
         redisUrl,
         successTTL,
         failureTTL,
-        keyPrefix
+        keyPrefix,
       );
     } catch (error) {
       throw new ConnectionError(`Failed to initialize client: ${error}`);
@@ -115,7 +115,7 @@ export class Client {
     payload: Record<string, any>,
     priority: JobPriority,
     routingKey: string,
-    description?: string
+    description?: string,
   ): Promise<string> {
     return this.submitJob({
       name,
@@ -143,7 +143,9 @@ export class Client {
    * });
    * ```
    */
-  async submitJobScheduled(options: SubmitScheduledJobOptions): Promise<string> {
+  async submitJobScheduled(
+    options: SubmitScheduledJobOptions,
+  ): Promise<string> {
     const job = createJob(options.name, options.payload, options.priority, {
       description: options.description,
       routingKey: options.routingKey,
@@ -213,7 +215,9 @@ export class Client {
    * }
    * ```
    */
-  async submitAndWait(options: SubmitAndWaitOptions): Promise<JobResult | null> {
+  async submitAndWait(
+    options: SubmitAndWaitOptions,
+  ): Promise<JobResult | null> {
     const timeout = options.timeout || 5 * 60 * 1000; // Default: 5 minutes
 
     const job = createJob(options.name, options.payload, options.priority, {

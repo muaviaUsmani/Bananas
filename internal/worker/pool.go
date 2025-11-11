@@ -273,4 +273,3 @@ func (p *Pool) executeWithTimeout(ctx context.Context, workerID int, j *job.Job)
 		jobLogger.InfoContext(jobCtx, "Job completed", "worker_id", workerID, "job_id", j.ID)
 	}
 }
-

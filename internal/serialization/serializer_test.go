@@ -37,9 +37,9 @@ func TestSerializer_Marshal_Protobuf(t *testing.T) {
 	s := NewProtobufSerializer()
 
 	task := &tasks.EmailTask{
-		To:      "user@example.com",
-		From:    "noreply@example.com",
-		Subject: "Test Email",
+		To:       "user@example.com",
+		From:     "noreply@example.com",
+		Subject:  "Test Email",
 		BodyText: "This is a test email",
 		Headers: map[string]string{
 			"X-Priority": "1",
@@ -475,10 +475,10 @@ func TestSerializer_BatchTask(t *testing.T) {
 		Concurrency: 10,
 		CreatedAt:   timestamppb.Now(),
 		Options: &tasks.BatchOptions{
-			StopOnError:   true,
-			ReturnResults: true,
+			StopOnError:    true,
+			ReturnResults:  true,
 			TimeoutSeconds: 300,
-			ResultFormat:  "json",
+			ResultFormat:   "json",
 		},
 	}
 

@@ -195,9 +195,10 @@ class TestClient:
 
     def test_submit_and_wait_success(self, mock_redis_connection, redis_url):
         """Test submit_and_wait with immediate result."""
-        from bananas.models import JobResult
         import threading
         import time
+
+        from bananas.models import JobResult
 
         client = Client(redis_url)
 

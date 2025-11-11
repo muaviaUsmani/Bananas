@@ -2,8 +2,8 @@
  * Model classes and utilities for Bananas.
  */
 
-import { v4 as uuidv4 } from 'uuid';
-import { Job, JobPriority, JobResult, JobStatus } from './types';
+import { v4 as uuidv4 } from "uuid";
+import { Job, JobPriority, JobResult, JobStatus } from "./types";
 
 /**
  * Create a new job.
@@ -23,7 +23,7 @@ export function createJob(
     routingKey?: string;
     scheduledFor?: Date;
     id?: string;
-  } = {}
+  } = {},
 ): Job {
   const now = new Date();
 
@@ -39,7 +39,7 @@ export function createJob(
     scheduledFor: options.scheduledFor,
     attempts: 0,
     maxRetries: 3,
-    error: '',
+    error: "",
     routingKey: options.routingKey,
   };
 }
@@ -54,7 +54,7 @@ export function jobToJSON(job: Job): string {
   const data: any = {
     id: job.id,
     name: job.name,
-    description: job.description || '',
+    description: job.description || "",
     payload: job.payload,
     status: job.status,
     priority: job.priority,
@@ -62,8 +62,8 @@ export function jobToJSON(job: Job): string {
     updated_at: job.updatedAt.toISOString(),
     attempts: job.attempts,
     max_retries: job.maxRetries,
-    error: job.error || '',
-    routing_key: job.routingKey || '',
+    error: job.error || "",
+    routing_key: job.routingKey || "",
   };
 
   if (job.scheduledFor) {
@@ -94,7 +94,7 @@ export function jobFromJSON(json: string): Job {
     scheduledFor: data.scheduled_for ? new Date(data.scheduled_for) : undefined,
     attempts: data.attempts || 0,
     maxRetries: data.max_retries || 3,
-    error: data.error || '',
+    error: data.error || "",
     routingKey: data.routing_key,
   };
 }
@@ -132,7 +132,7 @@ export function resultToRedisHash(result: JobResult): Record<string, string> {
  */
 export function resultFromRedisHash(
   jobId: string,
-  hash: Record<string, string>
+  hash: Record<string, string>,
 ): JobResult {
   let result: Record<string, any> | undefined;
   if (hash.result) {
@@ -150,7 +150,7 @@ export function resultFromRedisHash(
     result,
     error: hash.error,
     completedAt: new Date(hash.completed_at),
-    durationMs: parseInt(hash.duration_ms || '0', 10),
+    durationMs: parseInt(hash.duration_ms || "0", 10),
   };
 }
 

@@ -2,10 +2,10 @@
  * Result backend for storing and retrieving job results.
  */
 
-import Redis from 'ioredis';
-import { ConnectionError, ResultNotFoundError } from './errors';
-import { resultFromRedisHash, resultToRedisHash } from './models';
-import { JobResult } from './types';
+import Redis from "ioredis";
+import { ConnectionError, ResultNotFoundError } from "./errors";
+import { resultFromRedisHash, resultToRedisHash } from "./models";
+import { JobResult } from "./types";
 
 /**
  * Redis-backed result storage.
@@ -29,7 +29,7 @@ export class RedisResultBackend {
     redisUrl: string,
     successTTL: number = 60 * 60 * 1000, // 1 hour
     failureTTL: number = 24 * 60 * 60 * 1000, // 24 hours
-    keyPrefix: string = 'bananas'
+    keyPrefix: string = "bananas",
   ) {
     this.successTTL = successTTL;
     this.failureTTL = failureTTL;
@@ -39,12 +39,12 @@ export class RedisResultBackend {
       this.redis = new Redis(redisUrl);
       this.pubsub = new Redis(redisUrl); // Separate connection for pub/sub
 
-      this.redis.on('error', (err) => {
-        console.error('Redis connection error:', err);
+      this.redis.on("error", (err) => {
+        console.error("Redis connection error:", err);
       });
 
-      this.pubsub.on('error', (err) => {
-        console.error('Redis pubsub error:', err);
+      this.pubsub.on("error", (err) => {
+        console.error("Redis pubsub error:", err);
       });
     } catch (error) {
       throw new ConnectionError(`Failed to connect to Redis: ${error}`);
@@ -62,9 +62,10 @@ export class RedisResultBackend {
       const hash = resultToRedisHash(result);
 
       // Determine TTL
-      const ttlSeconds = result.status === 'completed'
-        ? Math.floor(this.successTTL / 1000)
-        : Math.floor(this.failureTTL / 1000);
+      const ttlSeconds =
+        result.status === "completed"
+          ? Math.floor(this.successTTL / 1000)
+          : Math.floor(this.failureTTL / 1000);
 
       // Store result with TTL
       const pipeline = this.redis.pipeline();
@@ -113,7 +114,10 @@ export class RedisResultBackend {
    * @param timeoutMs - Maximum time to wait in milliseconds
    * @returns Job result if available within timeout, null otherwise
    */
-  async waitForResult(jobId: string, timeoutMs: number): Promise<JobResult | null> {
+  async waitForResult(
+    jobId: string,
+    timeoutMs: number,
+  ): Promise<JobResult | null> {
     // First check if result already exists
     const existingResult = await this.getResult(jobId);
     if (existingResult) {
@@ -136,7 +140,7 @@ export class RedisResultBackend {
       // Subscribe to notifications
       this.pubsub.subscribe(notifyChannel, async (err) => {
         if (err) {
-          console.error('Subscription error:', err);
+          console.error("Subscription error:", err);
           if (!resolved) {
             resolved = true;
             clearTimeout(timeoutHandle);
@@ -147,7 +151,7 @@ export class RedisResultBackend {
       });
 
       // Handle messages
-      this.pubsub.on('message', async (channel, message) => {
+      this.pubsub.on("message", async (channel, message) => {
         if (channel === notifyChannel && !resolved) {
           resolved = true;
           clearTimeout(timeoutHandle);

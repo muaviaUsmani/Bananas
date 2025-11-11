@@ -22,6 +22,7 @@ class JobStatus(str, Enum):
         FAILED: Job failed and will not be retried
         SCHEDULED: Job is scheduled for future execution
     """
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETED = "completed"
@@ -37,6 +38,7 @@ class JobPriority(str, Enum):
         NORMAL: Normal priority jobs
         LOW: Low priority jobs that can be processed later
     """
+
     HIGH = "high"
     NORMAL = "normal"
     LOW = "low"

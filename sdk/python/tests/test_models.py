@@ -97,6 +97,7 @@ class TestJob:
 
         # Small delay to ensure timestamp changes
         import time
+
         time.sleep(0.01)
 
         job.update_status(JobStatus.PROCESSING)

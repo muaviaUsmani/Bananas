@@ -42,4 +42,3 @@ func HandleProcessData(ctx context.Context, j *job.Job) error {
 	time.Sleep(3 * time.Second) // Simulate work
 	return nil
 }
-

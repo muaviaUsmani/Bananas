@@ -2,10 +2,10 @@
  * Redis queue operations for Bananas.
  */
 
-import Redis from 'ioredis';
-import { ConnectionError, JobNotFoundError } from './errors';
-import { createJob, jobFromJSON, jobToJSON } from './models';
-import { Job } from './types';
+import Redis from "ioredis";
+import { ConnectionError, JobNotFoundError } from "./errors";
+import { createJob, jobFromJSON, jobToJSON } from "./models";
+import { Job } from "./types";
 
 /**
  * Redis-backed job queue.
@@ -20,7 +20,7 @@ export class RedisQueue {
    * @param redisUrl - Redis connection URL
    * @param keyPrefix - Prefix for all Redis keys (default: 'bananas')
    */
-  constructor(redisUrl: string, keyPrefix: string = 'bananas') {
+  constructor(redisUrl: string, keyPrefix: string = "bananas") {
     this.keyPrefix = keyPrefix;
 
     try {
@@ -33,8 +33,8 @@ export class RedisQueue {
         },
       });
 
-      this.redis.on('error', (err) => {
-        console.error('Redis connection error:', err);
+      this.redis.on("error", (err) => {
+        console.error("Redis connection error:", err);
       });
     } catch (error) {
       throw new ConnectionError(`Failed to connect to Redis: ${error}`);
@@ -68,7 +68,7 @@ export class RedisQueue {
    */
   async enqueueScheduled(job: Job): Promise<void> {
     if (!job.scheduledFor) {
-      throw new Error('Job must have scheduledFor set');
+      throw new Error("Job must have scheduledFor set");
     }
 
     try {

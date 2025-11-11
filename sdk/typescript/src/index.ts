@@ -34,10 +34,10 @@
  */
 
 // Export main client
-export { Client } from './client';
+export { Client } from "./client";
 
 // Export types and enums
-export { JobStatus, JobPriority } from './types';
+export { JobStatus, JobPriority } from "./types";
 export type {
   Job,
   JobResult,
@@ -45,7 +45,7 @@ export type {
   SubmitJobOptions,
   SubmitScheduledJobOptions,
   SubmitAndWaitOptions,
-} from './types';
+} from "./types";
 
 // Export errors
 export {
@@ -56,7 +56,7 @@ export {
   TimeoutError,
   SerializationError,
   InvalidJobError,
-} from './errors';
+} from "./errors";
 
 // Export utility functions
 export {
@@ -65,4 +65,4 @@ export {
   jobFromJSON,
   isResultSuccess,
   isResultFailed,
-} from './models';
+} from "./models";

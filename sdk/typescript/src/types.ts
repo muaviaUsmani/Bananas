@@ -6,20 +6,20 @@
  * Job status enumeration.
  */
 export enum JobStatus {
-  PENDING = 'pending',
-  PROCESSING = 'processing',
-  COMPLETED = 'completed',
-  FAILED = 'failed',
-  SCHEDULED = 'scheduled',
+  PENDING = "pending",
+  PROCESSING = "processing",
+  COMPLETED = "completed",
+  FAILED = "failed",
+  SCHEDULED = "scheduled",
 }
 
 /**
  * Job priority enumeration.
  */
 export enum JobPriority {
-  HIGH = 'high',
-  NORMAL = 'normal',
-  LOW = 'low',
+  HIGH = "high",
+  NORMAL = "normal",
+  LOW = "low",
 }
 
 /**

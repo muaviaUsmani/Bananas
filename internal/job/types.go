@@ -75,13 +75,13 @@ type Job struct {
 //	job := NewJob("resize_image", payload, PriorityHigh)
 func NewJob(name string, payload []byte, priority JobPriority, description ...string) *Job {
 	now := time.Now()
-	
+
 	// Extract optional description (take first if provided)
 	var desc string
 	if len(description) > 0 {
 		desc = description[0]
 	}
-	
+
 	return &Job{
 		ID:          uuid.New().String(),
 		Name:        name,
@@ -119,9 +119,9 @@ func ValidateRoutingKey(key string) error {
 	// Validate routing key format (alphanumeric, underscores, hyphens)
 	for _, char := range key {
 		if !((char >= 'a' && char <= 'z') ||
-		     (char >= 'A' && char <= 'Z') ||
-		     (char >= '0' && char <= '9') ||
-		     char == '_' || char == '-') {
+			(char >= 'A' && char <= 'Z') ||
+			(char >= '0' && char <= '9') ||
+			char == '_' || char == '-') {
 			return fmt.Errorf("invalid routing key format: must contain only alphanumeric characters, underscores, and hyphens")
 		}
 	}
@@ -140,4 +140,3 @@ func (j *Job) SetRoutingKey(key string) error {
 	j.UpdatedAt = time.Now()
 	return nil
 }
-

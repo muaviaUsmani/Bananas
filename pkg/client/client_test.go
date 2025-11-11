@@ -256,4 +256,3 @@ func TestSubmitJob_ThreadSafety(t *testing.T) {
 		t.Errorf("error submitting job: %v", err)
 	}
 }
-

@@ -8,7 +8,7 @@
 export class BananasError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = 'BananasError';
+    this.name = "BananasError";
     Object.setPrototypeOf(this, BananasError.prototype);
   }
 }
@@ -19,7 +19,7 @@ export class BananasError extends Error {
 export class ConnectionError extends BananasError {
   constructor(message: string) {
     super(message);
-    this.name = 'ConnectionError';
+    this.name = "ConnectionError";
     Object.setPrototypeOf(this, ConnectionError.prototype);
   }
 }
@@ -30,7 +30,7 @@ export class ConnectionError extends BananasError {
 export class JobNotFoundError extends BananasError {
   constructor(message: string) {
     super(message);
-    this.name = 'JobNotFoundError';
+    this.name = "JobNotFoundError";
     Object.setPrototypeOf(this, JobNotFoundError.prototype);
   }
 }
@@ -41,7 +41,7 @@ export class JobNotFoundError extends BananasError {
 export class ResultNotFoundError extends BananasError {
   constructor(message: string) {
     super(message);
-    this.name = 'ResultNotFoundError';
+    this.name = "ResultNotFoundError";
     Object.setPrototypeOf(this, ResultNotFoundError.prototype);
   }
 }
@@ -52,7 +52,7 @@ export class ResultNotFoundError extends BananasError {
 export class TimeoutError extends BananasError {
   constructor(message: string) {
     super(message);
-    this.name = 'TimeoutError';
+    this.name = "TimeoutError";
     Object.setPrototypeOf(this, TimeoutError.prototype);
   }
 }
@@ -63,7 +63,7 @@ export class TimeoutError extends BananasError {
 export class SerializationError extends BananasError {
   constructor(message: string) {
     super(message);
-    this.name = 'SerializationError';
+    this.name = "SerializationError";
     Object.setPrototypeOf(this, SerializationError.prototype);
   }
 }
@@ -74,7 +74,7 @@ export class SerializationError extends BananasError {
 export class InvalidJobError extends BananasError {
   constructor(message: string) {
     super(message);
-    this.name = 'InvalidJobError';
+    this.name = "InvalidJobError";
     Object.setPrototypeOf(this, InvalidJobError.prototype);
   }
 }

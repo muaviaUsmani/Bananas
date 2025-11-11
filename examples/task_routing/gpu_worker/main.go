@@ -97,10 +97,10 @@ func processImage(ctx context.Context, j *job.Job) error {
 // trainModel simulates GPU-based ML model training
 func trainModel(ctx context.Context, j *job.Job) error {
 	type TrainingPayload struct {
-		Model      string `json:"model"`
-		Dataset    string `json:"dataset"`
-		Epochs     int    `json:"epochs"`
-		BatchSize  int    `json:"batch_size"`
+		Model     string `json:"model"`
+		Dataset   string `json:"dataset"`
+		Epochs    int    `json:"epochs"`
+		BatchSize int    `json:"batch_size"`
 	}
 
 	var payload TrainingPayload

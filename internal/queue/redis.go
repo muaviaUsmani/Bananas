@@ -46,19 +46,19 @@ func NewRedisQueue(redisURL string) (*RedisQueue, error) {
 	//
 	// Pool size calculation: workers + API concurrency + scheduler + buffer
 	// Example: 10 workers + 10 API + 1 scheduler + 5 buffer = 26 connections
-	opts.PoolSize = 50 // Maximum connections in pool (handles up to ~40 workers)
-	opts.MinIdleConns = 5 // Keep 5 idle connections ready (reduces connection setup latency)
+	opts.PoolSize = 50                      // Maximum connections in pool (handles up to ~40 workers)
+	opts.MinIdleConns = 5                   // Keep 5 idle connections ready (reduces connection setup latency)
 	opts.ConnMaxIdleTime = 10 * time.Minute // Close idle connections after 10 minutes
-	opts.PoolTimeout = 5 * time.Second       // Wait up to 5 seconds for connection from pool
+	opts.PoolTimeout = 5 * time.Second      // Wait up to 5 seconds for connection from pool
 
 	// Retry configuration for transient failures
-	opts.MaxRetries = 3                               // Retry failed commands up to 3 times
-	opts.MinRetryBackoff = 8 * time.Millisecond       // Minimum 8ms between retries
-	opts.MaxRetryBackoff = 512 * time.Millisecond     // Maximum 512ms between retries
-	opts.DialTimeout = 5 * time.Second                // Timeout for establishing connection
-	opts.ReadTimeout = 10 * time.Second               // Longer timeout for blocking operations (BRPOPLPUSH)
-	opts.WriteTimeout = 3 * time.Second               // Timeout for write operations
-	opts.ContextTimeoutEnabled = true                 // Respect context timeouts
+	opts.MaxRetries = 3                           // Retry failed commands up to 3 times
+	opts.MinRetryBackoff = 8 * time.Millisecond   // Minimum 8ms between retries
+	opts.MaxRetryBackoff = 512 * time.Millisecond // Maximum 512ms between retries
+	opts.DialTimeout = 5 * time.Second            // Timeout for establishing connection
+	opts.ReadTimeout = 10 * time.Second           // Longer timeout for blocking operations (BRPOPLPUSH)
+	opts.WriteTimeout = 3 * time.Second           // Timeout for write operations
+	opts.ContextTimeoutEnabled = true             // Respect context timeouts
 
 	// Create client with optimized options
 	client := redis.NewClient(opts)
@@ -74,8 +74,8 @@ func NewRedisQueue(redisURL string) (*RedisQueue, error) {
 
 	prefix := "bananas:"
 	return &RedisQueue{
-		client:          client,
-		keyPrefix:       prefix,
+		client:    client,
+		keyPrefix: prefix,
 		// Pre-compute all static keys once to avoid repeated string allocations
 		queueHighKey:    prefix + "queue:high",
 		queueNormalKey:  prefix + "queue:normal",
@@ -85,7 +85,7 @@ func NewRedisQueue(redisURL string) (*RedisQueue, error) {
 		scheduledSetKey: prefix + "queue:scheduled",
 		// Set default TTL values for job data retention
 		// These prevent Redis from growing unbounded with old job data
-		completedJobTTL: 24 * time.Hour, // Keep completed jobs for 24 hours
+		completedJobTTL: 24 * time.Hour,     // Keep completed jobs for 24 hours
 		failedJobTTL:    7 * 24 * time.Hour, // Keep failed jobs for 7 days
 	}, nil
 }
@@ -271,8 +271,8 @@ func (q *RedisQueue) Dequeue(ctx context.Context, priorities []job.JobPriority) 
 			pipe.LRem(ctx, processingKey, 1, jobID)
 			// Update job data to mark as corrupted with TTL
 			errorJob := map[string]interface{}{
-				"id":            jobID,
-				"error":         fmt.Sprintf("Failed to unmarshal job: %v", err),
+				"id":             jobID,
+				"error":          fmt.Sprintf("Failed to unmarshal job: %v", err),
 				"corrupted_data": truncate(jobData, 500), // Store truncated data for debugging
 			}
 			errorData, _ := json.Marshal(errorJob)
@@ -370,8 +370,8 @@ func (q *RedisQueue) DequeueWithRouting(ctx context.Context, routingKeys []strin
 				pipe.LPush(ctx, q.deadLetterQueueKey(), jobID)
 				pipe.LRem(ctx, processingKey, 1, jobID)
 				errorJob := map[string]interface{}{
-					"id":            jobID,
-					"error":         fmt.Sprintf("Failed to unmarshal job: %v", err),
+					"id":             jobID,
+					"error":          fmt.Sprintf("Failed to unmarshal job: %v", err),
 					"corrupted_data": truncate(jobData, 500),
 				}
 				errorData, _ := json.Marshal(errorJob)
@@ -703,4 +703,3 @@ func truncate(s string, maxLen int) string {
 func (q *RedisQueue) DeadLetterQueueLength(ctx context.Context) (int64, error) {
 	return q.client.LLen(ctx, q.deadLetterQueueKey()).Result()
 }
-

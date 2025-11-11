@@ -227,4 +227,3 @@ func (c *Client) Close() error {
 	}
 	return resultErr
 }
-

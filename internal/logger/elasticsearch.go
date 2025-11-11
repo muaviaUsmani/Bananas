@@ -20,20 +20,20 @@ import (
 // - Support for self-managed and cloud deployments
 // - <1μs overhead per log (async)
 type ElasticsearchLogger struct {
-	config       *Config
-	client       *http.Client
-	bulkURL      string
-	apiKey       string
-	buffer       chan *LogEntry
-	batchBuf     []*LogEntry
-	closeChan    chan struct{}
-	wg           sync.WaitGroup
+	config    *Config
+	client    *http.Client
+	bulkURL   string
+	apiKey    string
+	buffer    chan *LogEntry
+	batchBuf  []*LogEntry
+	closeChan chan struct{}
+	wg        sync.WaitGroup
 
 	// Circuit breaker state
-	cbState      atomic.Value // "closed", "open", "half-open"
-	cbFailures   atomic.Int32
-	cbLastFail   atomic.Value // time.Time
-	cbMutex      sync.Mutex
+	cbState    atomic.Value // "closed", "open", "half-open"
+	cbFailures atomic.Int32
+	cbLastFail atomic.Value // time.Time
+	cbMutex    sync.Mutex
 }
 
 // circuitState represents the circuit breaker state

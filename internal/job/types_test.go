@@ -258,13 +258,13 @@ func TestValidateRoutingKey_Valid(t *testing.T) {
 
 func TestValidateRoutingKey_Invalid(t *testing.T) {
 	invalidKeys := []string{
-		"",                                                                    // empty
-		"a2345678901234567890123456789012345678901234567890123456789012345",  // too long (65 chars)
-		"gpu worker",                                                          // spaces
-		"gpu@worker",                                                          // special char
-		"gpu.worker",                                                          // dot
-		"gpu/worker",                                                          // slash
-		"gpu:worker",                                                          // colon
+		"", // empty
+		"a2345678901234567890123456789012345678901234567890123456789012345", // too long (65 chars)
+		"gpu worker", // spaces
+		"gpu@worker", // special char
+		"gpu.worker", // dot
+		"gpu/worker", // slash
+		"gpu:worker", // colon
 	}
 
 	for _, key := range invalidKeys {
@@ -315,4 +315,3 @@ func TestJob_RoutingKeyJSONMarshaling(t *testing.T) {
 		t.Errorf("expected routing key 'gpu', got '%s'", unmarshaled.RoutingKey)
 	}
 }
-
