@@ -21,7 +21,8 @@ func main() {
 	defer c.Close()
 
 	log.Println("Connected to Bananas job queue")
-	log.Println("Submitting jobs with different routing keys...\n")
+	log.Println("Submitting jobs with different routing keys...")
+	log.Println()
 
 	// Submit GPU jobs
 	submitGPUJobs(c)
