@@ -47,3 +47,14 @@ tmp/
 # Air hot reload
 .air.toml
 build-errors.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.class
+.coverage
+htmlcov/
+.pytest_cache/
+*.egg-info/
+dist/
+build/
