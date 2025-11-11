@@ -16,13 +16,13 @@ linters:
     - staticcheck   # Static analysis
     - unused        # Detect unused code
     - misspell      # Spell checking
-    - revive        # Fast linter
     - gosec         # Security issues
     - bodyclose     # HTTP response body close
     - noctx         # HTTP request without context
     - unconvert     # Unnecessary type conversions
     - whitespace    # Whitespace issues
   disable:
+    - revive        # Style warnings - too noisy
     - prealloc      # Too strict for tests
     - unparam       # Too noisy for tests
 
