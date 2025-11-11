@@ -77,7 +77,7 @@ func (c *Collector) RecordJobStarted(priority job.JobPriority) {
 }
 
 // RecordJobCompleted records a successfully completed job
-func (c *Collector) RecordJobCompleted(priority job.JobPriority, duration time.Duration) {
+func (c *Collector) RecordJobCompleted(_ job.JobPriority, duration time.Duration) {
 	c.totalJobsCompleted.Add(1)
 
 	c.mu.Lock()
@@ -89,7 +89,7 @@ func (c *Collector) RecordJobCompleted(priority job.JobPriority, duration time.D
 }
 
 // RecordJobFailed records a failed job
-func (c *Collector) RecordJobFailed(priority job.JobPriority, duration time.Duration) {
+func (c *Collector) RecordJobFailed(_ job.JobPriority, duration time.Duration) {
 	c.totalJobsFailed.Add(1)
 
 	c.mu.Lock()

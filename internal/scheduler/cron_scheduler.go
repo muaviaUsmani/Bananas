@@ -1,3 +1,4 @@
+// Package scheduler provides cron-based job scheduling functionality.
 package scheduler
 
 import (
@@ -156,12 +157,14 @@ func (cs *CronScheduler) executeSchedule(ctx context.Context, schedule *Schedule
 			"job_name", schedule.Job,
 			"error", err)
 
-		// Update state with error - ignore update errors as they're not critical
-		_ = cs.updateState(ctx, schedule.ID, &ScheduleState{
+		// Update state with error - log if update fails but don't fail the operation
+		if updateErr := cs.updateState(ctx, schedule.ID, &ScheduleState{
 			ID:        schedule.ID,
 			LastRun:   now,
 			LastError: err.Error(),
-		})
+		}); updateErr != nil {
+			cs.log.Warn("Failed to update schedule state", "schedule_id", schedule.ID, "error", updateErr)
+		}
 		return
 	}
 
@@ -181,16 +184,18 @@ func (cs *CronScheduler) executeSchedule(ctx context.Context, schedule *Schedule
 		nextRun = time.Time{} // Zero time
 	}
 
-	// Update state - ignore update errors as they're not critical
+	// Update state - log if update fails but don't fail the operation
 	runCount := cs.incrementRunCount(ctx, schedule.ID)
-	_ = cs.updateState(ctx, schedule.ID, &ScheduleState{
+	if updateErr := cs.updateState(ctx, schedule.ID, &ScheduleState{
 		ID:          schedule.ID,
 		LastRun:     now,
 		NextRun:     nextRun,
 		LastSuccess: now,
 		RunCount:    runCount,
 		LastError:   "", // Clear error on success
-	})
+	}); updateErr != nil {
+		cs.log.Warn("Failed to update schedule state", "schedule_id", schedule.ID, "error", updateErr)
+	}
 
 	cs.log.Debug("Schedule state updated",
 		"schedule_id", schedule.ID,

@@ -1,3 +1,4 @@
+// Package client provides a Go SDK for submitting and managing Bananas jobs.
 package client
 
 import (

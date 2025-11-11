@@ -1,3 +1,4 @@
+// Package queue provides Redis-based job queue implementation with support for priorities, routing, and scheduling.
 package queue
 
 import (

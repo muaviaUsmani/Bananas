@@ -186,7 +186,7 @@ func (cl *ConsoleLogger) log(level LogLevel, msg string, component Component, so
 	}
 
 	// Handle the record - ignore errors as there's no good way to handle them in logging
-	_ = cl.handler.Handle(nil, record)
+	_ = cl.handler.Handle(context.TODO(), record)
 }
 
 // Close flushes and closes the console logger

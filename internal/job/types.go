@@ -118,10 +118,10 @@ func ValidateRoutingKey(key string) error {
 
 	// Validate routing key format (alphanumeric, underscores, hyphens)
 	for _, char := range key {
-		if !((char >= 'a' && char <= 'z') ||
-			(char >= 'A' && char <= 'Z') ||
-			(char >= '0' && char <= '9') ||
-			char == '_' || char == '-') {
+		if (char < 'a' || char > 'z') &&
+			(char < 'A' || char > 'Z') &&
+			(char < '0' || char > '9') &&
+			char != '_' && char != '-' {
 			return fmt.Errorf("invalid routing key format: must contain only alphanumeric characters, underscores, and hyphens")
 		}
 	}

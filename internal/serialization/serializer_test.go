@@ -4,8 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/muaviaUsmani/bananas/proto/gen"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/muaviaUsmani/bananas/proto/gen"
 )
 
 func TestSerializer_Marshal_JSON(t *testing.T) {

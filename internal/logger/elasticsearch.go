@@ -273,14 +273,15 @@ func (el *ElasticsearchLogger) sendBulkRequest(body io.Reader) error {
 			continue
 		}
 
-		defer resp.Body.Close()
-
+		// Check response status
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return nil // Success
+			_ = resp.Body.Close() // Ignore close error on success
+			return nil            // Success
 		}
 
 		// Read error response
 		respBody, err := io.ReadAll(resp.Body)
+		_ = resp.Body.Close() // Ignore close error
 		if err != nil {
 			respBody = []byte("failed to read response body")
 		}
