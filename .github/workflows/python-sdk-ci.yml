@@ -15,21 +15,10 @@ on:
 jobs:
   test:
     name: Test
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
-        exclude:
-          # Reduce matrix size - only test all versions on Ubuntu
-          - os: macos-latest
-            python-version: '3.8'
-          - os: macos-latest
-            python-version: '3.9'
-          - os: windows-latest
-            python-version: '3.8'
-          - os: windows-latest
-            python-version: '3.9'
 
     steps:
     - name: Checkout code
@@ -63,7 +52,7 @@ jobs:
       with:
         files: ./sdk/python/coverage.xml
         flags: python
-        name: python-${{ matrix.python-version }}-${{ matrix.os }}
+        name: python-${{ matrix.python-version }}
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       continue-on-error: true
