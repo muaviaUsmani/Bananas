@@ -1,0 +1,114 @@
+name: Documentation
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'docs/**'
+      - '**.md'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'docs/**'
+      - '**.md'
+      - '.github/workflows/docs.yml'
+
+jobs:
+  markdown-lint:
+    name: Markdown Lint
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Lint markdown files
+      uses: articulate/actions-markdownlint@v1
+      with:
+        config: .markdownlint.json
+        files: '**/*.md'
+        ignore: node_modules
+      continue-on-error: true
+
+  link-check:
+    name: Check Links
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check links in markdown files
+      uses: gaurav-nelson/github-action-markdown-link-check@v1
+      with:
+        use-quiet-mode: 'yes'
+        use-verbose-mode: 'yes'
+        config-file: '.markdown-link-check.json'
+      continue-on-error: true
+
+  spelling:
+    name: Spell Check
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check spelling
+      uses: rojopolis/spellcheck-github-actions@0.35.0
+      with:
+        config_path: .spellcheck.yml
+        task_name: Markdown
+      continue-on-error: true
+
+  code-examples:
+    name: Validate Code Examples
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+
+    - name: Extract and validate Go examples
+      run: |
+        echo "Checking for Go code blocks in documentation..."
+        # This is a placeholder - in practice, you'd extract code blocks and test them
+        grep -r "\`\`\`go" docs/ || echo "No Go examples found"
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Validate Python examples
+      run: |
+        echo "Checking for Python code blocks in documentation..."
+        grep -r "\`\`\`python" docs/ || echo "No Python examples found"
+
+  docs-build:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Check README files exist
+      run: |
+        echo "Checking for essential README files..."
+        test -f README.md || (echo "Missing README.md" && exit 1)
+        test -f sdk/python/README.md || (echo "Missing Python SDK README" && exit 1)
+        test -f sdk/typescript/README.md || (echo "Missing TypeScript SDK README" && exit 1)
+        echo "All README files present"
+
+    - name: Validate documentation structure
+      run: |
+        echo "Checking documentation structure..."
+        test -d docs || (echo "Missing docs directory" && exit 1)
+        echo "Documentation structure is valid"

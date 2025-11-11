@@ -12,7 +12,7 @@ import (
 )
 
 // HandleCountItems counts items in a JSON array payload
-func HandleCountItems(ctx context.Context, j *job.Job) error {
+func HandleCountItems(_ context.Context, j *job.Job) error {
 	var items []string
 	if err := json.Unmarshal(j.Payload, &items); err != nil {
 		return err
@@ -22,7 +22,7 @@ func HandleCountItems(ctx context.Context, j *job.Job) error {
 }
 
 // HandleSendEmail simulates sending an email
-func HandleSendEmail(ctx context.Context, j *job.Job) error {
+func HandleSendEmail(_ context.Context, j *job.Job) error {
 	var email struct {
 		To      string `json:"to"`
 		Subject string `json:"subject"`
@@ -37,9 +37,8 @@ func HandleSendEmail(ctx context.Context, j *job.Job) error {
 }
 
 // HandleProcessData simulates data processing
-func HandleProcessData(ctx context.Context, j *job.Job) error {
+func HandleProcessData(_ context.Context, j *job.Job) error {
 	log.Printf("Job %s: processing data", j.ID)
 	time.Sleep(3 * time.Second) // Simulate work
 	return nil
 }
-

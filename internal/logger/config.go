@@ -61,18 +61,18 @@ type Config struct {
 
 // ConsoleConfig configures console/terminal logging (Tier 1)
 type ConsoleConfig struct {
-	Enabled    bool   `json:"enabled"`     // Always true in practice
-	Color      bool   `json:"color"`       // Enable colored output (text mode only)
-	BufferSize int    `json:"buffer_size"` // Async buffer size (default: 65536 bytes)
+	Enabled       bool          `json:"enabled"`        // Always true in practice
+	Color         bool          `json:"color"`          // Enable colored output (text mode only)
+	BufferSize    int           `json:"buffer_size"`    // Async buffer size (default: 65536 bytes)
 	FlushInterval time.Duration `json:"flush_interval"` // Flush interval (default: 100ms)
 }
 
 // FileConfig configures file-based logging (Tier 2)
 type FileConfig struct {
 	Enabled    bool   `json:"enabled"`
-	Path       string `json:"path"`        // Log file path
-	MaxSizeMB  int    `json:"max_size_mb"` // Max size before rotation
-	MaxBackups int    `json:"max_backups"` // Max number of old log files
+	Path       string `json:"path"`         // Log file path
+	MaxSizeMB  int    `json:"max_size_mb"`  // Max size before rotation
+	MaxBackups int    `json:"max_backups"`  // Max number of old log files
 	MaxAgeDays int    `json:"max_age_days"` // Max age in days
 	Compress   bool   `json:"compress"`     // Compress rotated files
 
@@ -105,11 +105,11 @@ type ElasticsearchConfig struct {
 	Workers       int           `json:"workers"`        // Number of bulk processor workers (default: 2)
 
 	// Reliability settings
-	MaxRetries    int           `json:"max_retries"`    // Max retries for failed requests (default: 3)
-	RetryBackoff  time.Duration `json:"retry_backoff"`  // Initial retry backoff (default: 1s)
-	CircuitBreaker bool         `json:"circuit_breaker"` // Enable circuit breaker (default: true)
-	FailureThreshold int        `json:"failure_threshold"` // Failures before circuit opens (default: 5)
-	ResetTimeout  time.Duration `json:"reset_timeout"`  // Time before circuit reset attempt (default: 30s)
+	MaxRetries       int           `json:"max_retries"`       // Max retries for failed requests (default: 3)
+	RetryBackoff     time.Duration `json:"retry_backoff"`     // Initial retry backoff (default: 1s)
+	CircuitBreaker   bool          `json:"circuit_breaker"`   // Enable circuit breaker (default: true)
+	FailureThreshold int           `json:"failure_threshold"` // Failures before circuit opens (default: 5)
+	ResetTimeout     time.Duration `json:"reset_timeout"`     // Time before circuit reset attempt (default: 30s)
 }
 
 // DefaultConfig returns a default logging configuration

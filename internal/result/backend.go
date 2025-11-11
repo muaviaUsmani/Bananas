@@ -1,3 +1,4 @@
+// Package result provides backend interfaces and implementations for storing and retrieving job results.
 package result
 
 import (

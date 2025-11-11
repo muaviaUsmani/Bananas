@@ -625,26 +625,26 @@ func TestExponentialBackoff_Calculation(t *testing.T) {
 			// Dequeue and fail
 			priorities := []job.JobPriority{job.PriorityHigh, job.PriorityNormal, job.PriorityLow}
 			dequeuedJob, _ := queue.Dequeue(ctx, priorities)
-			
+
 			beforeFail := time.Now()
 			queue.Fail(ctx, dequeuedJob, "error")
-			
+
 			// Retrieve job and check scheduled time
 			failedJob, _ := queue.GetJob(ctx, j.ID)
-			
+
 			if failedJob.ScheduledFor == nil {
 				t.Fatal("expected ScheduledFor to be set")
 			}
-			
+
 			// Calculate actual delay
 			actualDelay := failedJob.ScheduledFor.Sub(beforeFail)
 			expectedDelay := time.Duration(tt.expectedSecs) * time.Second
-			
+
 			// Allow 1 second tolerance for test execution time
 			if actualDelay < expectedDelay-time.Second || actualDelay > expectedDelay+time.Second {
 				t.Errorf("expected delay ~%v, got %v", expectedDelay, actualDelay)
 			}
-			
+
 			// Cleanup for next iteration
 			mr.FlushDB()
 		})
@@ -671,7 +671,7 @@ func TestMoveScheduledToReady_MultipleJobs(t *testing.T) {
 	queue.Enqueue(ctx, job3)
 
 	priorities := []job.JobPriority{job.PriorityHigh, job.PriorityNormal, job.PriorityLow}
-	
+
 	// Dequeue and fail all jobs
 	dj1, _ := queue.Dequeue(ctx, priorities)
 	queue.Fail(ctx, dj1, "error")
@@ -706,4 +706,3 @@ func TestMoveScheduledToReady_MultipleJobs(t *testing.T) {
 		t.Errorf("expected 1 job in each queue, got high=%d normal=%d low=%d", highLen, normalLen, lowLen)
 	}
 }
-

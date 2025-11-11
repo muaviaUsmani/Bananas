@@ -5,8 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/muaviaUsmani/bananas/proto/gen"
 	"google.golang.org/protobuf/types/known/timestamppb"
+
+	"github.com/muaviaUsmani/bananas/proto/gen"
 )
 
 // JSONToProtoEmail converts a JSON payload to EmailTask

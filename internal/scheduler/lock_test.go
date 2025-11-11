@@ -25,6 +25,7 @@ func setupTestRedis(t *testing.T) (*redis.Client, *miniredis.Miniredis) {
 func TestAcquireLock_Success(t *testing.T) {
 	client, mr := setupTestRedis(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 	key := "test:lock"
@@ -55,6 +56,7 @@ func TestAcquireLock_Success(t *testing.T) {
 func TestAcquireLock_AlreadyLocked(t *testing.T) {
 	client, mr := setupTestRedis(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 	key := "test:lock"
@@ -83,6 +85,7 @@ func TestAcquireLock_AlreadyLocked(t *testing.T) {
 func TestReleaseLock_Success(t *testing.T) {
 	client, mr := setupTestRedis(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 	key := "test:lock"
@@ -113,6 +116,7 @@ func TestReleaseLock_Success(t *testing.T) {
 func TestReleaseLock_NotOwned(t *testing.T) {
 	client, mr := setupTestRedis(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 	key := "test:lock"
@@ -149,6 +153,7 @@ func TestReleaseLock_NotOwned(t *testing.T) {
 func TestExtendLock_Success(t *testing.T) {
 	client, mr := setupTestRedis(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 	key := "test:lock"
@@ -185,6 +190,7 @@ func TestExtendLock_Success(t *testing.T) {
 func TestExtendLock_NotOwned(t *testing.T) {
 	client, mr := setupTestRedis(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 	key := "test:lock"
@@ -210,6 +216,7 @@ func TestExtendLock_NotOwned(t *testing.T) {
 func TestAcquireLock_TTLExpiration(t *testing.T) {
 	client, mr := setupTestRedis(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 	key := "test:lock"
@@ -241,6 +248,7 @@ func TestAcquireLock_TTLExpiration(t *testing.T) {
 func TestAcquireLock_ConcurrentAttempts(t *testing.T) {
 	client, mr := setupTestRedis(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 	key := "test:lock"
@@ -304,6 +312,7 @@ func TestAcquireLock_ConcurrentAttempts(t *testing.T) {
 func TestLock_MultipleRelease(t *testing.T) {
 	client, mr := setupTestRedis(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 	key := "test:lock"

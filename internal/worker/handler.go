@@ -46,4 +46,3 @@ func (r *Registry) Execute(ctx context.Context, j *job.Job) error {
 	}
 	return handler(ctx, j)
 }
-

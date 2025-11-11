@@ -37,27 +37,27 @@ type Logger interface {
 
 // LogEntry represents a single log entry with all metadata
 type LogEntry struct {
-	Timestamp  string                 `json:"timestamp"`
-	Level      LogLevel               `json:"level"`
-	Message    string                 `json:"message"`
-	Component  Component              `json:"component,omitempty"`
-	Source     LogSource              `json:"log_source,omitempty"`
-	Fields     map[string]interface{} `json:"fields,omitempty"`
-	JobID      string                 `json:"job_id,omitempty"`
-	WorkerID   string                 `json:"worker_id,omitempty"`
-	Error      string                 `json:"error,omitempty"`
+	Timestamp string                 `json:"timestamp"`
+	Level     LogLevel               `json:"level"`
+	Message   string                 `json:"message"`
+	Component Component              `json:"component,omitempty"`
+	Source    LogSource              `json:"log_source,omitempty"`
+	Fields    map[string]interface{} `json:"fields,omitempty"`
+	JobID     string                 `json:"job_id,omitempty"`
+	WorkerID  string                 `json:"worker_id,omitempty"`
+	Error     string                 `json:"error,omitempty"`
 }
 
 // MultiLogger implements Logger by dispatching to multiple backends
 type MultiLogger struct {
-	config    *Config
-	console   *ConsoleLogger
-	file      *FileLogger
-	elastic   *ElasticsearchLogger
+	config     *Config
+	console    *ConsoleLogger
+	file       *FileLogger
+	elastic    *ElasticsearchLogger
 	baseFields map[string]interface{}
-	component Component
-	source    LogSource
-	mu        sync.RWMutex
+	component  Component
+	source     LogSource
+	mu         sync.RWMutex
 }
 
 // NewLogger creates a new multi-tier logger based on configuration
@@ -306,18 +306,18 @@ func (ml *MultiLogger) log(ctx context.Context, level LogLevel, msg string, args
 // NoOpLogger is a logger that does nothing (for testing)
 type NoOpLogger struct{}
 
-func (n *NoOpLogger) Debug(msg string, args ...interface{})                            {}
-func (n *NoOpLogger) Info(msg string, args ...interface{})                             {}
-func (n *NoOpLogger) Warn(msg string, args ...interface{})                             {}
-func (n *NoOpLogger) Error(msg string, args ...interface{})                            {}
+func (n *NoOpLogger) Debug(msg string, args ...interface{})                             {}
+func (n *NoOpLogger) Info(msg string, args ...interface{})                              {}
+func (n *NoOpLogger) Warn(msg string, args ...interface{})                              {}
+func (n *NoOpLogger) Error(msg string, args ...interface{})                             {}
 func (n *NoOpLogger) DebugContext(ctx context.Context, msg string, args ...interface{}) {}
 func (n *NoOpLogger) InfoContext(ctx context.Context, msg string, args ...interface{})  {}
 func (n *NoOpLogger) WarnContext(ctx context.Context, msg string, args ...interface{})  {}
 func (n *NoOpLogger) ErrorContext(ctx context.Context, msg string, args ...interface{}) {}
-func (n *NoOpLogger) WithFields(fields map[string]interface{}) Logger                  { return n }
-func (n *NoOpLogger) WithComponent(component Component) Logger                         { return n }
-func (n *NoOpLogger) WithSource(source LogSource) Logger                               { return n }
-func (n *NoOpLogger) Close() error                                                     { return nil }
+func (n *NoOpLogger) WithFields(fields map[string]interface{}) Logger                   { return n }
+func (n *NoOpLogger) WithComponent(component Component) Logger                          { return n }
+func (n *NoOpLogger) WithSource(source LogSource) Logger                                { return n }
+func (n *NoOpLogger) Close() error                                                      { return nil }
 
 // Ensure NoOpLogger implements Logger
 var _ Logger = (*NoOpLogger)(nil)

@@ -133,8 +133,8 @@ func (fl *FileLogger) flush() {
 			continue // Skip malformed entries
 		}
 
-		// Write to lumberjack logger
-		fl.logger.Write(append(data, '\n'))
+		// Write to lumberjack logger - ignore errors as there's no good recovery
+		_, _ = fl.logger.Write(append(data, '\n'))
 	}
 
 	// Clear batch buffer

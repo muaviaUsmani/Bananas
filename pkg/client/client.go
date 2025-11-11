@@ -1,3 +1,4 @@
+// Package client provides a Go SDK for submitting and managing Bananas jobs.
 package client
 
 import (
@@ -83,6 +84,34 @@ func (c *Client) SubmitJob(name string, payload interface{}, priority job.JobPri
 
 	// Create new job
 	j := job.NewJob(name, payloadBytes, priority, description...)
+
+	// Enqueue to Redis
+	if err := c.queue.Enqueue(c.ctx, j); err != nil {
+		return "", fmt.Errorf("failed to enqueue job: %w", err)
+	}
+
+	return j.ID, nil
+}
+
+// SubmitJobWithRoute creates and submits a new job with a specific routing key.
+// The payload will be marshaled to JSON automatically.
+// The routing key determines which workers will process this job.
+// Description is optional - if provided, the first value will be used.
+// Returns the job ID on success.
+func (c *Client) SubmitJobWithRoute(name string, payload interface{}, priority job.JobPriority, routingKey string, description ...string) (string, error) {
+	// Marshal payload to JSON
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal payload: %w", err)
+	}
+
+	// Create new job
+	j := job.NewJob(name, payloadBytes, priority, description...)
+
+	// Set routing key
+	if err := j.SetRoutingKey(routingKey); err != nil {
+		return "", fmt.Errorf("failed to set routing key: %w", err)
+	}
 
 	// Enqueue to Redis
 	if err := c.queue.Enqueue(c.ctx, j); err != nil {
@@ -199,4 +228,3 @@ func (c *Client) Close() error {
 	}
 	return resultErr
 }
-

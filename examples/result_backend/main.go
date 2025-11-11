@@ -18,7 +18,7 @@ func main() {
 	}
 	defer c.Close()
 
-	fmt.Println("=== Bananas Result Backend Example ===\n")
+	fmt.Println("=== Bananas Result Backend Example ===")
 
 	// Example 1: Submit and wait (RPC-style)
 	fmt.Println("Example 1: Submit and Wait (RPC-style)")

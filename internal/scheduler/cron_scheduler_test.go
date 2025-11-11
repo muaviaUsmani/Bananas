@@ -48,8 +48,9 @@ func setupCronScheduler(t *testing.T) (*CronScheduler, *Registry, *mockQueue, *r
 }
 
 func TestNewCronScheduler(t *testing.T) {
-	scheduler, _, _, _, mr := setupCronScheduler(t)
+	scheduler, _, _, client, mr := setupCronScheduler(t)
 	defer mr.Close()
+	defer client.Close()
 
 	if scheduler == nil {
 		t.Fatal("Expected non-nil scheduler")
@@ -65,8 +66,9 @@ func TestNewCronScheduler(t *testing.T) {
 }
 
 func TestCronScheduler_ExecuteSchedule(t *testing.T) {
-	scheduler, registry, q, _, mr := setupCronScheduler(t)
+	scheduler, registry, q, client, mr := setupCronScheduler(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 
@@ -133,8 +135,9 @@ func TestCronScheduler_ExecuteSchedule(t *testing.T) {
 }
 
 func TestCronScheduler_DefaultPriority(t *testing.T) {
-	scheduler, registry, q, _, mr := setupCronScheduler(t)
+	scheduler, registry, q, client, mr := setupCronScheduler(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 
@@ -162,8 +165,9 @@ func TestCronScheduler_DefaultPriority(t *testing.T) {
 }
 
 func TestCronScheduler_EnqueueError(t *testing.T) {
-	scheduler, registry, q, _, mr := setupCronScheduler(t)
+	scheduler, registry, q, client, mr := setupCronScheduler(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 
@@ -214,6 +218,7 @@ func TestCronScheduler_DistributedLocking(t *testing.T) {
 	client := redis.NewClient(&redis.Options{
 		Addr: mr.Addr(),
 	})
+	defer client.Close()
 
 	registry := NewRegistry()
 	q1 := &mockQueue{enqueued: make([]*job.Job, 0)}
@@ -258,8 +263,9 @@ func TestCronScheduler_DistributedLocking(t *testing.T) {
 }
 
 func TestCronScheduler_IsDue_NeverRun(t *testing.T) {
-	scheduler, registry, _, _, mr := setupCronScheduler(t)
+	scheduler, registry, _, client, mr := setupCronScheduler(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 
@@ -285,6 +291,7 @@ func TestCronScheduler_IsDue_NeverRun(t *testing.T) {
 func TestCronScheduler_IsDue_RecentlyRun(t *testing.T) {
 	scheduler, registry, _, client, mr := setupCronScheduler(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 
@@ -313,6 +320,7 @@ func TestCronScheduler_IsDue_RecentlyRun(t *testing.T) {
 func TestCronScheduler_IsDue_PastDue(t *testing.T) {
 	scheduler, registry, _, client, mr := setupCronScheduler(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 
@@ -339,8 +347,9 @@ func TestCronScheduler_IsDue_PastDue(t *testing.T) {
 }
 
 func TestCronScheduler_Tick_DisabledSchedule(t *testing.T) {
-	scheduler, registry, q, _, mr := setupCronScheduler(t)
+	scheduler, registry, q, client, mr := setupCronScheduler(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 
@@ -363,8 +372,9 @@ func TestCronScheduler_Tick_DisabledSchedule(t *testing.T) {
 }
 
 func TestCronScheduler_Tick_MultipleSchedules(t *testing.T) {
-	scheduler, registry, q, _, mr := setupCronScheduler(t)
+	scheduler, registry, q, client, mr := setupCronScheduler(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 
@@ -418,8 +428,9 @@ func TestCronScheduler_Tick_MultipleSchedules(t *testing.T) {
 }
 
 func TestCronScheduler_StateUpdate_ClearsError(t *testing.T) {
-	scheduler, registry, _, _, mr := setupCronScheduler(t)
+	scheduler, registry, _, client, mr := setupCronScheduler(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 
@@ -460,8 +471,9 @@ func TestCronScheduler_StateUpdate_ClearsError(t *testing.T) {
 }
 
 func TestCronScheduler_RunCount_Increment(t *testing.T) {
-	scheduler, registry, _, _, mr := setupCronScheduler(t)
+	scheduler, registry, _, client, mr := setupCronScheduler(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx := context.Background()
 
@@ -490,8 +502,9 @@ func TestCronScheduler_RunCount_Increment(t *testing.T) {
 }
 
 func TestCronScheduler_Start_Stop(t *testing.T) {
-	scheduler, _, _, _, mr := setupCronScheduler(t)
+	scheduler, _, _, client, mr := setupCronScheduler(t)
 	defer mr.Close()
+	defer client.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 

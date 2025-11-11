@@ -1,10 +1,11 @@
+// Package main provides the Bananas worker service for processing background jobs.
 package main
 
 import (
 	"context"
 	"fmt"
 	"net/http"
-	_ "net/http/pprof"
+	_ "net/http/pprof" // #nosec G108 - pprof is intentionally exposed for debugging, isolated to separate port
 	"os"
 	"os/signal"
 	"syscall"
@@ -40,7 +41,11 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Failed to initialize logger: %v\n", err)
 		os.Exit(1)
 	}
-	defer log.Close()
+	defer func() {
+		if err := log.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Failed to close logger: %v\n", err)
+		}
+	}()
 
 	// Set as default logger
 	logger.SetDefault(log)
@@ -66,7 +71,15 @@ func main() {
 	}
 	go func() {
 		workerLog.Info("Starting pprof server", "port", pprofPort, "url", fmt.Sprintf("http://localhost:%s/debug/pprof/", pprofPort))
-		if err := http.ListenAndServe(":"+pprofPort, nil); err != nil {
+		// Create server with timeouts for security
+		server := &http.Server{
+			Addr:              ":" + pprofPort,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       10 * time.Second,
+			WriteTimeout:      10 * time.Second,
+			IdleTimeout:       60 * time.Second,
+		}
+		if err := server.ListenAndServe(); err != nil {
 			workerLog.Error("pprof server failed", "error", err)
 		}
 	}()
@@ -77,7 +90,11 @@ func main() {
 		workerLog.Error("Failed to connect to Redis", "error", err)
 		os.Exit(1)
 	}
-	defer redisQueue.Close()
+	defer func() {
+		if err := redisQueue.Close(); err != nil {
+			workerLog.Error("Failed to close Redis queue", "error", err)
+		}
+	}()
 
 	// Create result backend if enabled
 	var resultBackend result.Backend
@@ -163,4 +180,3 @@ func main() {
 
 	workerLog.Info("Worker shut down successfully")
 }
-
