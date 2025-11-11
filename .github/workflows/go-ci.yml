@@ -45,13 +45,23 @@ jobs:
       run: |
         echo "Running unit tests with coverage..."
         echo "mode: atomic" > coverage.out
+        failed_packages=""
         for pkg in $(go list ./internal/... ./pkg/...); do
-          go test -v -timeout=15m -covermode=atomic -coverprofile=profile.out "$pkg"
-          if [ -f profile.out ]; then
-            tail -n +2 profile.out >> coverage.out
-            rm profile.out
+          echo "Testing $pkg..."
+          if go test -v -timeout=15m -covermode=atomic -coverprofile=profile.out "$pkg"; then
+            if [ -f profile.out ]; then
+              tail -n +2 profile.out >> coverage.out
+              rm profile.out
+            fi
+          else
+            echo "FAILED: $pkg"
+            failed_packages="$failed_packages $pkg"
           fi
         done
+        if [ -n "$failed_packages" ]; then
+          echo "Failed packages:$failed_packages"
+          exit 1
+        fi
       timeout-minutes: 20
 
     - name: Show test output on failure
