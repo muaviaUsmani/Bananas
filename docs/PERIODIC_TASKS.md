@@ -1,5 +1,8 @@
 # Periodic Tasks (Cron Scheduler)
 
+**Last Updated:** 2025-11-11
+**Status:** Complete
+
 Bananas includes a cron-style periodic task scheduler for running jobs on a regular schedule. This is similar to Celery Beat in Python but designed for Go applications.
 
 ## Table of Contents
@@ -25,6 +28,7 @@ The periodic task scheduler allows you to:
 - **Priority support** - Schedule jobs with high/normal/low priority
 - **State persistence** - Track execution history in Redis
 - **Enable/disable schedules** - Turn schedules on/off without deleting them
+- **Task routing integration** - Scheduled jobs support routing keys
 
 ### Architecture
 
@@ -34,7 +38,47 @@ The scheduler consists of three main components:
 2. **CronScheduler** - Checks schedules and enqueues jobs when due
 3. **DistributedLock** - Ensures single execution across multiple instances
 
-Jobs are enqueued to the same Redis-backed queue system used for regular jobs, so they're processed by your existing workers.
+Jobs are enqueued to the same Redis-backed queue system used for regular jobs (including routing-aware queues), so they're processed by your existing workers.
+
+```
+┌──────────────────────────────────────────────────────┐
+│               Application Code                        │
+│  scheduler.Register("cleanup", Schedule{             │
+│    Cron: "0 * * * *",  // Every hour                 │
+│    Job:  "cleanup_old_data",                         │
+│    Payload: []byte(`{"max_age_days": 30}`),          │
+│  })                                                  │
+└──────────────────────────────────────────────────────┘
+                        │
+                        ▼
+┌──────────────────────────────────────────────────────┐
+│          Schedule Registry (In-Memory)                │
+│  - Stores schedule definitions                       │
+│  - Validates cron expressions                        │
+│  - Calculates next run times                         │
+└──────────────────────────────────────────────────────┘
+                        │
+                        ▼
+┌──────────────────────────────────────────────────────┐
+│            Cron Scheduler Service                     │
+│  - Every 1 second: check for due schedules           │
+│  - Acquire distributed lock per schedule             │
+│  - Enqueue job to routing-aware queue                │
+└──────────────────────────────────────────────────────┘
+                        │
+                        ▼
+┌──────────────────────────────────────────────────────┐
+│                Redis Queue System                     │
+│  bananas:route:{routing_key}:queue:{priority}        │
+└──────────────────────────────────────────────────────┘
+                        │
+                        ▼
+┌──────────────────────────────────────────────────────┐
+│                   Worker Pool                         │
+│  - Dequeue and execute jobs                          │
+│  - Respects routing keys                             │
+└──────────────────────────────────────────────────────┘
+```
 
 ## Quick Start
 
@@ -130,9 +174,36 @@ type Schedule struct {
     Payload     []byte          // JSON payload for the job
     Priority    job.JobPriority // high, normal, or low
     Timezone    string          // IANA timezone (e.g., "America/New_York")
+    RoutingKey  string          // Optional: route to specific workers
     Enabled     bool            // Whether the schedule is active
     Description string          // Human-readable description
 }
+```
+
+### Scheduled Jobs with Routing Keys
+
+Periodic tasks support task routing for specialized worker pools:
+
+```go
+// Schedule GPU-intensive job for GPU workers
+registry.MustRegister(&scheduler.Schedule{
+    ID:         "nightly-model-training",
+    Cron:       "0 2 * * *",
+    Job:        "train_ml_model",
+    RoutingKey: "gpu",  // Route to GPU workers
+    Priority:   job.PriorityNormal,
+    Enabled:    true,
+})
+
+// Schedule email job for email workers
+registry.MustRegister(&scheduler.Schedule{
+    ID:         "daily-digest",
+    Cron:       "0 8 * * 1-5",  // Weekdays at 8 AM
+    Job:        "send_daily_digest",
+    RoutingKey: "email",  // Route to email workers
+    Priority:   job.PriorityHigh,
+    Enabled:    true,
+})
 ```
 
 ### Registration Methods
@@ -171,6 +242,7 @@ Schedules are validated on registration:
 - **Job**: Cannot be empty
 - **Timezone**: Must be valid IANA timezone
 - **Priority**: Must be `high`, `normal`, or `low` (if specified)
+- **RoutingKey**: Must be valid routing key format (if specified)
 
 ## Cron Expressions
 
@@ -331,13 +403,17 @@ Example output:
 
 ### Checking Enqueued Jobs
 
-Jobs are enqueued to priority queues:
+Jobs are enqueued to routing-aware priority queues:
 
 ```bash
-# Check pending jobs by priority
-redis-cli LRANGE bananas:queue:high 0 -1    # High priority
-redis-cli LRANGE bananas:queue:normal 0 -1  # Normal priority
-redis-cli LRANGE bananas:queue:low 0 -1     # Low priority
+# Check default queues
+redis-cli LRANGE bananas:route:default:queue:high 0 -1
+redis-cli LRANGE bananas:route:default:queue:normal 0 -1
+redis-cli LRANGE bananas:route:default:queue:low 0 -1
+
+# Check routed queues (e.g., GPU)
+redis-cli LRANGE bananas:route:gpu:queue:high 0 -1
+redis-cli LRANGE bananas:route:gpu:queue:normal 0 -1
 ```
 
 ### Logs
@@ -346,7 +422,7 @@ The scheduler logs execution events:
 
 ```
 INFO Cron scheduler started interval=1s schedules=5
-INFO Scheduled job enqueued schedule_id=daily-report job_name=generate_report job_id=abc123 priority=normal
+INFO Scheduled job enqueued schedule_id=daily-report job_name=generate_report job_id=abc123 priority=normal routing_key=default
 ERROR Failed to enqueue scheduled job schedule_id=backup job_name=backup error="queue full"
 ```
 
@@ -358,7 +434,7 @@ Monitor these Redis keys:
 
 - `bananas:schedules:*` - Schedule states
 - `bananas:schedule_lock:*` - Active locks
-- Queue lengths by priority
+- Queue lengths by priority and routing key
 
 ## Best Practices
 
@@ -386,7 +462,20 @@ Description: "Generate daily sales report and email to management"
 - **Normal**: Regular jobs (reports, syncs)
 - **Low**: Background tasks (cleanup, archival)
 
-### 4. Set Realistic Intervals
+### 4. Use Task Routing for Resource-Specific Jobs
+
+```go
+// GPU-intensive periodic jobs
+RoutingKey: "gpu"
+
+// Email-intensive periodic jobs
+RoutingKey: "email"
+
+// Region-specific periodic jobs
+RoutingKey: "us-east-1"
+```
+
+### 5. Set Realistic Intervals
 
 Don't schedule jobs more frequently than they can complete:
 
@@ -395,7 +484,7 @@ Don't schedule jobs more frequently than they can complete:
 Cron: "*/5 * * * *"  // Every 5 minutes - allows buffer
 ```
 
-### 5. Use Timezone-Aware Schedules
+### 6. Use Timezone-Aware Schedules
 
 For user-facing jobs, use the user's timezone:
 
@@ -403,7 +492,7 @@ For user-facing jobs, use the user's timezone:
 Timezone: "America/New_York"  // Not UTC
 ```
 
-### 6. Enable/Disable vs Delete
+### 7. Enable/Disable vs Delete
 
 Use `Enabled: false` to temporarily disable schedules:
 
@@ -414,7 +503,7 @@ Enabled: false
 
 This preserves the schedule definition and execution history.
 
-### 7. Test Cron Expressions
+### 8. Test Cron Expressions
 
 Verify your cron expressions using the `NextRun` method:
 
@@ -427,7 +516,7 @@ nextRun, err := registry.NextRun(schedule, time.Now())
 fmt.Printf("Next run: %s\n", nextRun.Format(time.RFC3339))
 ```
 
-### 8. Monitor for Failures
+### 9. Monitor for Failures
 
 Check `last_error` field in schedule state:
 
@@ -439,14 +528,14 @@ if state.LastError != "" {
 }
 ```
 
-### 9. Plan for Scale
+### 10. Plan for Scale
 
 If you have many schedules:
 - Use appropriate `CRON_SCHEDULER_INTERVAL` (1s is fine for <1000 schedules)
 - Monitor Redis performance
 - Consider sharding schedules across multiple Redis instances
 
-### 10. Document Your Schedules
+### 11. Document Your Schedules
 
 Keep a registry of all schedules with business purpose:
 
@@ -539,9 +628,16 @@ If seeing many "already locked" debug messages:
 2. **Check interval**: Ensure interval isn't too short
 3. **Verify schedule timing**: Schedules running too frequently may queue up
 
-## See Also
+---
 
-- [PERIODIC_TASKS_DESIGN.md](./PERIODIC_TASKS_DESIGN.md) - Architecture and design details
-- [examples/cron_scheduler/](../examples/cron_scheduler/) - Complete working example
-- [Crontab Guru](https://crontab.guru/) - Test cron expressions online
-- [IANA Time Zones](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) - Timezone reference
+## Related Documentation
+
+- **[PERIODIC_TASKS_DESIGN.md](PERIODIC_TASKS_DESIGN.md)** - Architecture and design details
+- **[Integration Guide](../INTEGRATION_GUIDE.md)** - Integration patterns and examples
+- **[Task Routing](TASK_ROUTING_USAGE.md)** - Route scheduled jobs to specific workers
+- **[Crontab Guru](https://crontab.guru/)** - Test cron expressions online
+- **[IANA Time Zones](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones)** - Timezone reference
+
+---
+
+**Next:** See [Task Routing Usage Guide](TASK_ROUTING_USAGE.md) for routing periodic jobs to specialized workers.
