@@ -22,19 +22,19 @@ import (
 
 // BenchmarkResults stores comprehensive benchmark data
 type BenchmarkResults struct {
-	TestName        string
-	TotalOps        int64
-	Duration        time.Duration
-	OpsPerSecond    float64
-	AvgLatency      time.Duration
-	P50Latency      time.Duration
-	P95Latency      time.Duration
-	P99Latency      time.Duration
-	MinLatency      time.Duration
-	MaxLatency      time.Duration
-	Configuration   map[string]interface{}
-	Timestamp       time.Time
-	SystemInfo      SystemInfo
+	TestName      string
+	TotalOps      int64
+	Duration      time.Duration
+	OpsPerSecond  float64
+	AvgLatency    time.Duration
+	P50Latency    time.Duration
+	P95Latency    time.Duration
+	P99Latency    time.Duration
+	MinLatency    time.Duration
+	MaxLatency    time.Duration
+	Configuration map[string]interface{}
+	Timestamp     time.Time
+	SystemInfo    SystemInfo
 }
 
 // SystemInfo captures system details for benchmarks

@@ -58,6 +58,11 @@ type WorkerConfig struct {
 	// Example: ["send_email", "generate_report"]
 	JobTypes []string
 
+	// RoutingKeys specifies which routing keys this worker should process
+	// Empty slice means all routing keys (default routing)
+	// Example: ["gpu", "cpu"] for workers that handle GPU or CPU jobs
+	RoutingKeys []string
+
 	// SchedulerInterval is how often to check for scheduled jobs
 	// Default: 1 second
 	SchedulerInterval time.Duration
@@ -74,6 +79,7 @@ func LoadWorkerConfig() (*WorkerConfig, error) {
 		Concurrency:       getEnvAsInt("WORKER_CONCURRENCY", 10),
 		Priorities:        parsePriorities(getEnv("WORKER_PRIORITIES", "")),
 		JobTypes:          parseJobTypes(getEnv("WORKER_JOB_TYPES", "")),
+		RoutingKeys:       parseRoutingKeys(getEnv("WORKER_ROUTING_KEYS", "")),
 		SchedulerInterval: getEnvAsDuration("SCHEDULER_INTERVAL", 1*time.Second),
 		EnableScheduler:   getEnvAsBool("ENABLE_SCHEDULER", true),
 	}
@@ -339,4 +345,28 @@ func allPriorities() []job.JobPriority {
 		job.PriorityNormal,
 		job.PriorityLow,
 	}
+}
+
+// parseRoutingKeys parses a comma-separated string of routing keys
+// Empty string returns nil (all routing keys)
+func parseRoutingKeys(s string) []string {
+	if s == "" {
+		return nil
+	}
+
+	parts := strings.Split(s, ",")
+	routingKeys := make([]string, 0, len(parts))
+
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed != "" {
+			routingKeys = append(routingKeys, trimmed)
+		}
+	}
+
+	if len(routingKeys) == 0 {
+		return nil
+	}
+
+	return routingKeys
 }

@@ -33,7 +33,7 @@ type EmailPayload struct {
 
 // DataProcessingPayload represents the data for data processing jobs
 type DataProcessingPayload struct {
-	DataSet string `json:"dataset"`
+	DataSet string                 `json:"dataset"`
 	Options map[string]interface{} `json:"options"`
 }
 
@@ -290,7 +290,7 @@ func main() {
 	dataPayload := DataProcessingPayload{
 		DataSet: "user_analytics_2025",
 		Options: map[string]interface{}{
-			"format": "json",
+			"format":   "json",
 			"compress": true,
 		},
 	}

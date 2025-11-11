@@ -42,11 +42,11 @@ func BenchmarkJSON_Marshal_SmallPayload(b *testing.B) {
 	s := serialization.NewJSONSerializer()
 
 	data := map[string]interface{}{
-		"to":       "user@example.com",
-		"from":     "noreply@example.com",
-		"subject":  "Test Email for Benchmarking",
+		"to":        "user@example.com",
+		"from":      "noreply@example.com",
+		"subject":   "Test Email for Benchmarking",
 		"body_text": "This is a test email body for performance benchmarking purposes.",
-		"cc":       []string{"alice@example.com", "bob@example.com"},
+		"cc":        []string{"alice@example.com", "bob@example.com"},
 		"headers": map[string]string{
 			"X-Priority": "1",
 			"X-Category": "benchmark",
@@ -93,11 +93,11 @@ func BenchmarkJSON_Unmarshal_SmallPayload(b *testing.B) {
 	s := serialization.NewJSONSerializer()
 
 	data := map[string]interface{}{
-		"to":       "user@example.com",
-		"from":     "noreply@example.com",
-		"subject":  "Test Email",
+		"to":        "user@example.com",
+		"from":      "noreply@example.com",
+		"subject":   "Test Email",
 		"body_text": "This is a test email body.",
-		"cc":       []string{"alice@example.com", "bob@example.com"},
+		"cc":        []string{"alice@example.com", "bob@example.com"},
 		"headers": map[string]string{
 			"X-Priority": "1",
 		},
@@ -136,9 +136,9 @@ func createMediumProtoPayload() *tasks.BatchTask {
 	}
 
 	return &tasks.BatchTask{
-		BatchId:   "batch-benchmark-medium",
-		Operation: "process_items",
-		Items:     items,
+		BatchId:     "batch-benchmark-medium",
+		Operation:   "process_items",
+		Items:       items,
 		Concurrency: 10,
 		CreatedAt:   timestamppb.Now(),
 		Options: &tasks.BatchOptions{
@@ -165,16 +165,16 @@ func createMediumJSONPayload() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"batch_id":   "batch-benchmark-medium",
-		"operation":  "process_items",
-		"items":      items,
+		"batch_id":    "batch-benchmark-medium",
+		"operation":   "process_items",
+		"items":       items,
 		"concurrency": 10,
-		"created_at": time.Now().Format(time.RFC3339),
+		"created_at":  time.Now().Format(time.RFC3339),
 		"options": map[string]interface{}{
-			"stop_on_error":    true,
-			"return_results":   true,
-			"timeout_seconds":  300,
-			"result_format":    "json",
+			"stop_on_error":   true,
+			"return_results":  true,
+			"timeout_seconds": 300,
+			"result_format":   "json",
 		},
 	}
 }
@@ -266,9 +266,9 @@ func createLargeProtoPayload() *tasks.BatchTask {
 	}
 
 	return &tasks.BatchTask{
-		BatchId:   "batch-benchmark-large-" + string(rune(time.Now().Unix())),
-		Operation: "process_large_batch",
-		Items:     items,
+		BatchId:     "batch-benchmark-large-" + string(rune(time.Now().Unix())),
+		Operation:   "process_large_batch",
+		Items:       items,
 		Concurrency: 50,
 		CreatedAt:   timestamppb.Now(),
 		Options: &tasks.BatchOptions{
@@ -305,16 +305,16 @@ func createLargeJSONPayload() map[string]interface{} {
 	}
 
 	return map[string]interface{}{
-		"batch_id":   "batch-benchmark-large-" + string(rune(time.Now().Unix())),
-		"operation":  "process_large_batch",
-		"items":      items,
+		"batch_id":    "batch-benchmark-large-" + string(rune(time.Now().Unix())),
+		"operation":   "process_large_batch",
+		"items":       items,
 		"concurrency": 50,
-		"created_at": time.Now().Format(time.RFC3339),
+		"created_at":  time.Now().Format(time.RFC3339),
 		"options": map[string]interface{}{
-			"stop_on_error":    false,
-			"return_results":   true,
-			"timeout_seconds":  600,
-			"result_format":    "protobuf",
+			"stop_on_error":   false,
+			"return_results":  true,
+			"timeout_seconds": 600,
+			"result_format":   "protobuf",
 		},
 	}
 }
@@ -395,11 +395,11 @@ func BenchmarkPayloadSize_Small(b *testing.B) {
 	}
 
 	jsonData := map[string]interface{}{
-		"to":       "user@example.com",
-		"from":     "noreply@example.com",
-		"subject":  "Test Email",
+		"to":        "user@example.com",
+		"from":      "noreply@example.com",
+		"subject":   "Test Email",
 		"body_text": "This is a test email body.",
-		"cc":       []string{"alice@example.com", "bob@example.com"},
+		"cc":        []string{"alice@example.com", "bob@example.com"},
 		"headers": map[string]string{
 			"X-Priority": "1",
 		},
@@ -467,9 +467,9 @@ func BenchmarkRoundTrip_Proto_Small(b *testing.B) {
 func BenchmarkRoundTrip_JSON_Small(b *testing.B) {
 	s := serialization.NewJSONSerializer()
 	data := map[string]interface{}{
-		"to":       "user@example.com",
-		"from":     "noreply@example.com",
-		"subject":  "Test Email",
+		"to":        "user@example.com",
+		"from":      "noreply@example.com",
+		"subject":   "Test Email",
 		"body_text": "Test body",
 	}
 
